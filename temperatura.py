@@ -1,4 +1,7 @@
 #!/usr/bin/python
+import constants
+from THutils import odczytaj_parametr_konfiguracji
+
 try:
     import threading
     import time
@@ -15,46 +18,58 @@ try:
     import firebasenotification
     import thread
     import logging
+    import przekazniki_BCM
+    from copy import deepcopy
 except (ImportError) as serr:
     pass
 PORT_LOKALNY = 6050
 
-FIREBASE_OBSZAR_TEMPERATURA = 'temperatura'
-FIREBASE_KOMUNIKAT_TEMPERATURA = 'zmiana_temperatury'
-
-
-
 class temperatura:
-    def __init__(self):
+    def __init__(self, mcp, firebase_callback=None):
+        self.mcp = mcp
         self.temp_out = -99.9
         self.wilg_out = 0
         self.temp_in = -99.9
         self.wilg_in = 0
         self.wilg_gleby = 0
-        self.pi = pigpio.pi()
-        self.logger = logging.getLogger('proszkowska')
-        self.nr_pinu = 4
+        self.ts = 0
+        self.firebase_callback = firebase_callback
+        self.stan_temperatury = {}
+        # self.pi = pigpio.pi()
+        self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
+        self.nr_pinu = 4 #pozniej w konfiguracji jest odczytywana wartosc z pliku
  #       GPIO.setmode(GPIO.BCM)
         self.odstep_odczytu_temperatury = 180
         # odstep w godzinach co ile ma byc odswiezana konfiguracja z bazy
         self.czas_odczytu_konfig = 24
         self.MOJE_IP = THutils.moje_ip('eth0')
-        self.notyfikacja_firebase = firebasenotification.Firebasenotification()
         self.odczytaj_konf()
+        #self.odczytaj_konfiguracje_cyklicznie()
+        self.aktualizuj_stan_temperatury()
         #self.nr_pinu = int(odczytaj_konfiguracje.odczytaj_konfiguracje_z_bazy('TEMP', 'PIN_PI_TEMPERATURA'))
         #self.odstep_odczytu_temperatury = int(odczytaj_konfiguracje.odczytaj_konfiguracje_z_bazy('OGOLNE', 'ODST_ODCZ_TEMP'))
-        self.s = sensor(self.pi, self.nr_pinu, power=8)
-        #self.odczytaj_temperature()
+        self.s = sensor(self.nr_pinu, power=8)
+        THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODLACZANIA_CZUJNIKOW')
         self.pobieraj_temperature_cyklicznie()
+        self.resetuj_czujniki_temperatury_cyklicznie()
 
-    def zwroc_temperatury(self):
+    def procesuj_polecenie(self,komenda, parametr1, parametr2):
+        # self.aktualizuj_stan_temperatury()
+        return THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY,
+                                              self.stan_temperatury, constants.STATUS_OK)
+
+    def aktualizuj_stan_temperatury(self):
         dane = {}
         dane['T_zewnatrz'] = self.temp_out
         dane['W_zewnatrz'] = self.wilg_out
         dane['T_wewnatrz'] = self.temp_in
         dane['W_wewnatrz'] = self.wilg_in
         dane['W_gleby'] = self.wilg_gleby
-        return dane
+        dane[constants.TS] = self.ts
+        self.stan_temperatury = dane
+
+    def zwroc_temperatury(self):
+        return self.stan_temperatury
 
     def uruchom_serwer(self):
         address = ('localhost', PORT_LOKALNY)  # family is deduced to be 'AF_INET'
@@ -66,34 +81,52 @@ class temperatura:
                 conn.close()
             if msg == 'TEMP':
                 self.odczytaj_temperature()
-                """dane = {}
-                dane['T_zewnatrz'] = self.temp_out
-                dane['W_zewnatrz'] = self.wilg_out
-                dane['T_wewnatrz'] = self.temp_in
-                dane['W_wewnatrz'] = self.wilg_in
-                dane['W_gleby'] = self.wilg_gleby
-                odp = dane"""
                 conn.send(self.zwroc_temperatury())
 
     def odczytaj_konf(self):
-        self.nr_pinu = int(THutils.odczytaj_parametr_konfiguracji('TEMP', 'PIN_PI_TEMPERATURA', self.logger))
-        self.odstep_odczytu_temperatury = int(THutils.odczytaj_parametr_konfiguracji('TEMP', 'ODST_ODCZ_TEMP', self.logger))
-        self.czas_odczytu_konfig = int(THutils.odczytaj_parametr_konfiguracji('TEMP', 'CZAS_ODCZYTU_KONFIG', self.logger))
+        self.nr_pinu = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'PIN_PI_TEMPERATURA', self.logger))
+        self.odstep_odczytu_temperatury = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'ODST_ODCZ_TEMP', self.logger))
+        self.czas_odczytu_konfig = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODCZYTU_KONFIG', self.logger))
         self.logger.info('Odczytalem konfiguracje temperatura.')
+
+    '''def odczytaj_konfiguracje_cyklicznie(self):
+        self.odczytaj_konf()
         now = datetime.datetime.now()
         run_at = now + datetime.timedelta(hours=self.czas_odczytu_konfig)
         delay = (run_at - now).total_seconds()
         # TODO aktywowac odczytywanie konfiguracji temperatury na nowo?
-        # threading.Timer(delay, self.odczytaj_konf).start()
+        # threading.Timer(delay, self.odczytaj_konf).start()'''
 
+    def resetuj_czujniki_temperatury_cyklicznie(self):
+        #czas_odlaczania_czujnikow = int(odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODLACZANIA_CZUJNIKOW')) * 60
+        # TODO z jakichs powodow nie odczytuje poprawnie powyzszego parametru z konfiguracji
+        czas_odlaczania_czujnikow = 38 * 60
+        threading.Timer(czas_odlaczania_czujnikow, self.resetuj_czujniki_temperatury_cyklicznie, []).start()
+        self.resetuj_czujniki_temperatury()
+
+    def resetuj_czujniki_temperatury(self):
+        # odlacza na 5 sekund czujniki temperatury, zasilanie
+        nr_pinu = int(odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'PIN_PI_ODLACZANIE_ZASILANIA_CZUJNIKOW'))
+        przekaz = przekazniki_BCM.PrzekaznikiBCM(self.mcp)
+        nazwa_przek = 'Reset czujn temp'
+        przekaz.dodaj_przekaznik(nazwa_przek, nr_pinu)
+        # TODO przerobic ten time.sleep na threading
+        # TODO chyba wlacz_na_czas nie dziala
+        # przekaz.wlacz_na_czas(0, 3)
+        przekaz.ustaw_przekaznik_nazwa(nazwa_przek, True)
+        time.sleep(2)
+        przekaz.ustaw_przekaznik_nazwa(nazwa_przek, False)
 
     def zapisz_temp_do_bazy(self):
-        db = MySQLdb.connect(host = "localhost", user = "root", passwd = "west1west1", db = "stacja_pogodowa")
-        cur = db.cursor()
-        cur.execute("""INSERT INTO stacja_pogodowa.temperatura(outside,wilgotnosc_out,inside,wilgotnosc_in,wilgotnosc_gleby) VALUES (%s, %s, %s, %s, %s)""", (self.temp_out, self.wilg_out, self.temp_in, self.wilg_in, self.wilg_gleby))
-        db.commit()
-        cur.close()
-        db.close()
+        try:
+            db = MySQLdb.connect(host = "localhost", user = "root", passwd = "west1west1", db = "stacja_pogodowa")
+            cur = db.cursor()
+            cur.execute("""INSERT INTO stacja_pogodowa.temperatura(outside,wilgotnosc_out,inside,wilgotnosc_in,wilgotnosc_gleby) VALUES (%s, %s, %s, %s, %s)""", (self.temp_out, self.wilg_out, self.temp_in, self.wilg_in, self.wilg_gleby))
+            db.commit()
+            cur.close()
+            db.close()
+        except MySQLdb._mysql.OperationalError as serr:
+            self.logger.warning('Blad zapisu temperatury do bazy danych: ' + str(serr))
 
     def odczytaj_temperature(self):
         # self.wilg, self.temp = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
@@ -103,6 +136,7 @@ class temperatura:
         self.wilg_out = 0
         self.s.trigger()
         #oryginalnie bylo 0.2
+        #TODO time.sleep do przemyslenia
         time.sleep(0.3)
         self.wilg_out = self.s.humidity()
         self.temp_out = self.s.temperature()
@@ -111,13 +145,24 @@ class temperatura:
             self.temp_out = -99.9
 
     def pobieraj_temperature_cyklicznie(self):
-        temp = self.temp_out
+        temp = deepcopy(self.temp_out)
+        #temp = self.temp_out
         self.odczytaj_temperature()
+
         #TODO tutaj trzeba przeniesc cykliczne resetowanie czujnika temperatury z mysocket do temperatury
         if int(round(temp)) != int(round(self.temp_out)):
+            self.ts = int(time.time())
             # self.logger.info("Zmiana w temperaturze, informuje klientow za pomoca Firebase. Poprzednio bylo: "
             #                + str(temp) + " a teraz jest " + str(self.temp_out))
-            thread.start_new_thread(self.notyfikacja_firebase.notify, (FIREBASE_OBSZAR_TEMPERATURA, FIREBASE_KOMUNIKAT_TEMPERATURA))
+
+            #notyfikacja_firebase = firebasenotification.Firebasenotification()
+            #notyfikacja_firebase.notify(constants.OBSZAR_TEMP, str(round(self.temp_out)))
+            if self.firebase_callback is not None:
+                #oo = THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY,
+                #                                    self.stan_temperatury, constants.STATUS_OK)
+                self.firebase_callback()
+                #print 'fire z temperatury'
+        self.aktualizuj_stan_temperatury()
         self.zapisz_temp_do_bazy()
         threading.Timer(self.odstep_odczytu_temperatury, self.pobieraj_temperature_cyklicznie).start()
 
@@ -125,14 +170,15 @@ class temperatura:
 
 class sensor:
 
-   def __init__(self, pi, gpio, LED=None, power=None):
-      self.pi = pi
-      self.gpio = gpio
+   def __init__(self, nr_pinu, LED=None, power=None):
+      # self.pi = pi
+      self.pi = pigpio.pi()
+      self.nr_pinu = nr_pinu
       self.LED = LED
       self.power = power
 
       if power is not None:
-         pi.write(power, 1) # Switch sensor on.
+         self.pi.write(power, 1) # Switch sensor on.
          time.sleep(2)
 
       self.powered = True
@@ -158,11 +204,11 @@ class sensor:
       self.high_tick = 0
       self.bit = 40
 
-      pi.set_pull_up_down(gpio, pigpio.PUD_OFF)
+      self.pi.set_pull_up_down(nr_pinu, pigpio.PUD_OFF)
 
-      pi.set_watchdog(gpio, 0) # Kill any watchdogs.
+      self.pi.set_watchdog(nr_pinu, 0) # Kill any watchdogs.
 
-      self.cb = pi.callback(gpio, pigpio.EITHER_EDGE, self._cb)
+      self.cb = self.pi.callback(nr_pinu, pigpio.EITHER_EDGE, self._cb)
 
    def _cb(self, gpio, level, tick):
       """
@@ -192,7 +238,7 @@ class sensor:
 
                # 40th bit received.
 
-               self.pi.set_watchdog(self.gpio, 0)
+               self.pi.set_watchdog(self.nr_pinu, 0)
 
                self.no_response = 0
 
@@ -247,7 +293,7 @@ class sensor:
             self.CS = 0
 
       else: # level == pigpio.TIMEOUT:
-         self.pi.set_watchdog(self.gpio, 0)
+         self.pi.set_watchdog(self.nr_pinu, 0)
          if self.bit < 8:       # Too few data bits received.
             self.bad_MM += 1    # Bump missing message count.
             self.no_response += 1
@@ -305,17 +351,17 @@ class sensor:
          if self.LED is not None:
             self.pi.write(self.LED, 1)
 
-         self.pi.write(self.gpio, pigpio.LOW)
+         self.pi.write(self.nr_pinu, pigpio.LOW)
          time.sleep(0.017) # 17 ms
-         self.pi.set_mode(self.gpio, pigpio.INPUT)
-         self.pi.set_watchdog(self.gpio, 200)
+         self.pi.set_mode(self.nr_pinu, pigpio.INPUT)
+         self.pi.set_watchdog(self.nr_pinu, 200)
 
    def cancel(self):
       """Cancel the DHT22 sensor."""
 
-      self.pi.set_watchdog(self.gpio, 0)
+      self.pi.set_watchdog(self.nr_pinu, 0)
 
-      if self.cb != None:
+      if self.cb is not None:
          self.cb.cancel()
          self.cb = None
 

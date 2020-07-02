@@ -1,227 +1,166 @@
-import datetime
-import threading
 import THutils
 import przekazniki_BCM
 import petlaczasowa
-import RPi.GPIO as gpio
+#import pigpio
 import time
 import logging
 import firebasenotification
 import thread
+import constants
+from copy import deepcopy
+from THutils import skonstruuj_odpowiedzV2
 
+WEJSCIE_WLACZNIK_SMIETNIK_WIATROLAP = 'wl_smietnik_WIATROLAP'
+WEJSCIE_WLACZNIK_SMIETNIK_GARAZ4 = 'wl_smietnik_GARAZ4'
+PIN_WL_SMIETNIK_WIATROLAP = 11
+PIN_WL_SMIETNIK_GARAZ4 = 12
+CZAS_ZALACZENIA_SMIETNIKA = 300
 
 NAZWA_ZIMOWE = 'Zimowe'
 NAZWA_OGNISKO = 'Ognisko'
 NAZWA_SMIETNIK = 'Smietnik'
 NAZWA_JADALNIA = 'Jadalnia'
-NR_ZIMOWE = 0
-NR_OGNISKO = 1
-NR_SMIETNIK = 2
-NR_JADALNIA = 3
 
-CZAS_URUCHOMIENIA_PETLI = 2
-CZAS_ZALACZENIA_SMIETNIKA = 300
-PIN_WL_SMIETNIK_WIATROLAP = 9
-PIN_WL_SMIETNIK_GARAZ4 = 22
+PIN_ZIMOWE = 10
+PIN_OGNISKO = 8
+PIN_SMIETNIK = 11
+PIN_JADALNIA = 12
+
+
 #TODO powyzsze piny do konfiguracji
-
-FIREBASE_OBSZAR_OSWIETLENIE = 'oswietlenie'
-FIREBASE_KOMUNIKAT_OSWIETLENIE = 'zmiana_oswietlenia'
-
 
 class Oswietlenie:
 
-    def __init__(self, mcp):
-        self.logger = logging.getLogger('proszkowska')
-        self.stan_oswietlenia = []
-        self.notyfikacja_firebase = firebasenotification.Firebasenotification()
-        # self.oswietlenie_zimowe_aktywne = False
-        # self.oswietlenie_jadalnia_aktywne = True
-        tab = []
+    def __init__(self, mcp, mcp_wejscia, firebase_callback=None):
+        self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
+        self.stan_oswietlenia = {}
+        #self.notyfikacja_firebase = firebasenotification.Firebasenotification()
         self.mcp = mcp
+        self.firebase_callback = firebase_callback
+        self.mcp_wejscia = mcp_wejscia
+        self.ts = int(time.time())
         #TODO dodac ponizsze do konfiguracji oswitlenia
-        tab.append({'numer':NR_ZIMOWE ,'nazwa': NAZWA_ZIMOWE, 'pin': 10})
-        tab.append({'numer':NR_OGNISKO ,'nazwa': NAZWA_OGNISKO, 'pin': 8})
-        tab.append({'numer':NR_SMIETNIK ,'nazwa': NAZWA_SMIETNIK, 'pin': 11})
-        tab.append({'numer':NR_JADALNIA ,'nazwa': NAZWA_JADALNIA, 'pin': 12})
-        self.prze = przekazniki_BCM.PrzekaznikiBCM(self.mcp, tab)
+        self.prze = przekazniki_BCM.PrzekaznikiBCM(self.mcp, self.aktualizuj_biezacy_stan_oswietlenia)
+        self.prze.dodaj_przekaznik(NAZWA_ZIMOWE, PIN_ZIMOWE)
+        self.prze.dodaj_przekaznik(NAZWA_OGNISKO, PIN_OGNISKO)
+        self.prze.dodaj_przekaznik(NAZWA_SMIETNIK, PIN_SMIETNIK, def_czas_zalaczenia=CZAS_ZALACZENIA_SMIETNIKA)
+        self.prze.dodaj_przekaznik(NAZWA_JADALNIA, PIN_JADALNIA)
 
-        gpio.setmode(gpio.BCM)
-        gpio.setup(PIN_WL_SMIETNIK_WIATROLAP, gpio.IN, pull_up_down=gpio.PUD_UP)
-        gpio.add_event_detect(PIN_WL_SMIETNIK_WIATROLAP, gpio.FALLING, callback=self.przycisk, bouncetime=200)
-        gpio.setup(PIN_WL_SMIETNIK_GARAZ4, gpio.IN, pull_up_down=gpio.PUD_UP)
-        gpio.add_event_detect(PIN_WL_SMIETNIK_GARAZ4, gpio.FALLING, callback=self.przycisk, bouncetime=200)
+        ''' self.gpio_pigpio.set_mode(PIN_WL_SMIETNIK_WIATROLAP, pigpio.INPUT)
+        self.gpio_pigpio.set_pull_up_down(PIN_WL_SMIETNIK_WIATROLAP, pigpio.PUD_UP)
+        self.gpio_pigpio.set_glitch_filter(PIN_WL_SMIETNIK_WIATROLAP, 15000)
+        self.gpio_pigpio.callback(PIN_WL_SMIETNIK_WIATROLAP, pigpio.FALLING_EDGE, self.przycisk)
 
-        self.glowna_tabela_oswietlenia = petlaczasowa.PetlaCzasowa(CZAS_URUCHOMIENIA_PETLI, self.wlacz_odb_nazwa)
+        self.gpio_pigpio.set_mode(PIN_WL_SMIETNIK_GARAZ4, pigpio.INPUT)
+        self.gpio_pigpio.set_pull_up_down(PIN_WL_SMIETNIK_GARAZ4, pigpio.PUD_UP)
+        self.gpio_pigpio.set_glitch_filter(PIN_WL_SMIETNIK_GARAZ4, 15000)
+        self.gpio_pigpio.callback(PIN_WL_SMIETNIK_GARAZ4, pigpio.FALLING_EDGE, self.przycisk)'''
+
+        self.mcp_wejscia.dodaj_wejscie(WEJSCIE_WLACZNIK_SMIETNIK_WIATROLAP, PIN_WL_SMIETNIK_WIATROLAP,
+                                       callback=self.wejscie_callback)
+        self.mcp_wejscia.dodaj_wejscie(WEJSCIE_WLACZNIK_SMIETNIK_GARAZ4, PIN_WL_SMIETNIK_GARAZ4,
+                                       callback=self.wejscie_callback)
+
+        self.glowna_tabela_oswietlenia = petlaczasowa.PetlaCzasowa(constants.OBSZAR_OSWI,
+                                                                   self.dzialanie_petli,
+                                                                   callback=self.aktualizuj_biezacy_stan_oswietlenia,
+                                                                   logger=self.logger)
         #TODO do parametrow czas_uruchomienia_petli
         # TODO co to jest ponizsze?
         self.czas_odczytu_konfig = 6000
-        self.czas_odswiezania_petli=70000
-        self.odczytaj_konfiguracje()
+        #self.czas_odswiezania_petli=70000
+        self.odczytaj_konf()
         # self.czas_odswiezania_tablicy_oswietlenia = 30
-        self.odczytuj_tablice_oswietlenia_cyklicznie()
-        self.glowna_tabela_oswietlenia.aktywuj_petle(True)
+        #self.odczytuj_tablice_oswietlenia_cyklicznie()
 
-        self.wlacz_odb_nazwa(NAZWA_SMIETNIK, False)
-        self.wlacz_odb_nazwa(NAZWA_ZIMOWE, False)
-        self.wlacz_odb_nazwa(NAZWA_OGNISKO, False)
-        self.wlacz_odb_nazwa(NAZWA_JADALNIA, False)
+        self.prze.ustaw_przekaznik_nazwa(NAZWA_SMIETNIK, False)
+        self.prze.ustaw_przekaznik_nazwa(NAZWA_ZIMOWE, False)
+        self.prze.ustaw_przekaznik_nazwa(NAZWA_OGNISKO, False)
+        self.prze.ustaw_przekaznik_nazwa(NAZWA_JADALNIA, False)
+
+        self.stan_oswietlenia_do_tuple()
+        self.glowna_tabela_oswietlenia.aktywuj_petle(True)
 
         self.aktualizuj_biezacy_stan_oswietlenia()
         self.logger.info('Zainicjowalem klase oswietlenie.')
 
+    def wejscie_callback(self, pin, nazwa, stan):
+        if nazwa == WEJSCIE_WLACZNIK_SMIETNIK_WIATROLAP:
+            if stan == 0:
+                self.logger.info('Wcisnieto przycisk Smietnik Wiatrolap.')
+                self.wlacz_smietnik_samodzielny()
+        elif nazwa == WEJSCIE_WLACZNIK_SMIETNIK_GARAZ4:
+            if stan == 0:
+                self.logger.info('Wcisnieto przycisk Smietnik Garaz.')
+                self.wlacz_smietnik_samodzielny()
+        else:
+            return
+        self.ts = int(time.time())
+        return
+
+
     def procesuj_polecenie(self,komenda, parametr1, parametr2):
-        if komenda == 'WN':  # wlacz po nazwie
-            if parametr2 == '1':
-                st = True
-            else:
-                st = False
-            self.wlacz_odb_nazwa(parametr1, st)
-        elif komenda == 'OS':  # odbiornik w petli sterowanie, aktywacja schematu
-            if parametr2 == 'WLACZ':
+        if komenda == constants.TOGGLE_ODBIORNIK_NAZWA:  # wlacz po nazwie
+            self.prze.toggle_przekaznik_nazwa(parametr1)
+            self.ts = int(time.time())
+            self.logger.info('Oswietlenie ' + parametr1 + ' toggle.')
+        elif komenda == constants.AKTYWACJA_SCHEMATU:  # odbiornik w petli sterowanie, aktywacja schematu
+            if parametr2 == constants.PARAMETR_WLACZ:
                 wl = True
             else:
                 wl = False
             self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(parametr1, wl)
-            THutils.zapisz_parametr_konfiguracji('OSWIETLENIE', parametr1, wl, self.logger)
+            self.ts = int(time.time())
+            #self.zapisz_tablice_oswietlenia_do_ini()
             self.logger.info('Aktywacja petli oswietlenia ' + str(parametr1) + '. Stan: ' + str(wl))
-        # TODO ponizsze do usuniecia chyba
-        elif komenda == 'ST':
-            pass
+        elif komenda == constants.KOMENDA_ODCZYTAJ_CYKLE_Z_KONFIGURACJI:
+            self.glowna_tabela_oswietlenia.odczytaj_cykle_z_konfiguracji()
         self.aktualizuj_biezacy_stan_oswietlenia()
+        return skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_OSWIETLENIA,
+                                       self.stan_oswietlenia, constants.STATUS_OK)
 
-    def przycisk(self, pin):
-        if pin == PIN_WL_SMIETNIK_WIATROLAP:
-            time.sleep(0.05)
-            inx = gpio.input(PIN_WL_SMIETNIK_WIATROLAP)
-            if inx == 0:
-                self.wlacz_smietnik_samodzielny()
-        elif pin == PIN_WL_SMIETNIK_GARAZ4:
-            time.sleep(0.05)
-            inx = gpio.input(PIN_WL_SMIETNIK_GARAZ4)
-            if inx == 0:
-                self.wlacz_smietnik_samodzielny()
-        return
-
-    def wlacz_smietnik_samodzielny(self):
-        if not self.prze.stan_przekaznika_nazwa(NAZWA_SMIETNIK):
-            wl = datetime.datetime.now()
-            wyl = wl + datetime.timedelta(0, CZAS_ZALACZENIA_SMIETNIKA)
-            self.glowna_tabela_oswietlenia.dodaj_do_tabeli(NAZWA_SMIETNIK, wl.hour, wl.minute, wyl.hour, wyl.minute,
-                                                           '0123456', True, typ='J')
-            self.logger.info('Wlaczylem oswietlenie nad smietnikiem.')
-        return
-
-    """def wlacz_smietnik(self):
-        if self.prze.stan_przekaznika_nazwa(SMIETNIK) == 0:
-            wl = datetime.datetime.now()
-            wyl = wl + datetime.timedelta(0, CZAS_ZALACZENIA_SMIETNIKA)
-            self.glowna_tabela_oswietlenia.dodaj_do_tabeli(SMIETNIK, wl.hour, wl.minute, wyl.hour, wyl.minute,
-                                                           '0123456', 1, typ='J')
-            THutils.zapisz_do_logu_plik('I', 'Wlaczylem oswietlenie nad smietnikiem.')
-        else:
-            self.prze.ustaw_przekaznik_nazwa(SMIETNIK, 0)
-            THutils.zapisz_do_logu_plik('I', 'Wylaczylem oswietlenie nad smietnikiem.')"""
-
-    """def uruchom_oswietlenie_zimowe(self, wlaczone):
-        if wlaczone:
-            # self.oswietlenie_zimowe_aktywne = True
-            self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(NAZWA_ZIMOWE, True)
-        else:
-            # self.oswietlenie_zimowe_aktywne = False
-            self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(NAZWA_ZIMOWE, False)
-        #TODO wspolna czesc konfiguracji albo kazdy plik konfiguracyjny osobny dla garazu i naglo bo aktualizacja parame
-        self.aktualizuj_biezacy_stan_oswietlenia()
-        return"""
-
-    """def uruchom_oswietlenie_jadalnia(self, wlaczona):
-        if wlaczona:
-            self.oswietlenie_jadalnia_aktywne = True
-            self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(NAZWA_JADALNIA, True)
-        else:
-            self.oswietlenie_jadalnia_aktywne = False
-            self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(NAZWA_JADALNIA, False)
-        self.aktualizuj_biezacy_stan_oswietlenia()
-        return"""
-
-    def wlacz_odb_nazwa(self, nazwa, stan):
+    def dzialanie_petli(self, nazwa, stan):
         stan_poprzzedni = self.prze.stan_przekaznika_nazwa(nazwa)
         self.prze.ustaw_przekaznik_nazwa(nazwa, stan)
         if self.prze.stan_przekaznika_nazwa(nazwa) != stan_poprzzedni:
+            self.ts = int(time.time())
             self.logger.info('Oswietlenie ' + nazwa + ', stan: ' + str(stan))
-        self.aktualizuj_biezacy_stan_oswietlenia()
+            self.aktualizuj_biezacy_stan_oswietlenia()
 
-    def wlacz_odbiornik_nr(self, nr_odbiornika, stan):
-        if stan == 1:
-            st = True
-        else:
-            st = False
-        self.prze.ustaw_przekaznik_nr(nr_odbiornika, st)
-        if self.prze.pin[nr_odbiornika].get_stan() != st:
-            self.logger.info('Oswietlenie ' + str(nr_odbiornika) + ', stan: ' + str(st))
-        self.aktualizuj_biezacy_stan_oswietlenia()
-
-    def aktualizuj_biezacy_stan_oswietlenia(self):
-        temp = self.stan_oswietlenia
-        odbi = []
-        for j in self.prze.pin:
-            odbi.append({j.get_nazwa(): j.get_stan()})
-        self.stan_oswietlenia = {'zimowe_aktywne': self.glowna_tabela_oswietlenia.czy_pozycja_aktywna(NAZWA_ZIMOWE),
-                'jadalnia_aktywna': self.glowna_tabela_oswietlenia.czy_pozycja_aktywna(NAZWA_JADALNIA),
-                                 'Ktorykolwiek_wlaczony':self.prze.czy_ktorykolwiek_wlaczony(),
-                                 'Odbiorniki': odbi}
-        if self.stan_oswietlenia != temp:
-            thread.start_new_thread(self.notyfikacja_firebase.notify, (FIREBASE_OBSZAR_OSWIETLENIE, FIREBASE_KOMUNIKAT_OSWIETLENIE))
+    def wlacz_smietnik_samodzielny(self):
+        przek_smie = self.prze.przekaznik_po_nazwie(NAZWA_SMIETNIK)
+        if not przek_smie.get_stan(): #self.prze.stan_przekaznika_nazwa(NAZWA_SMIETNIK):
+            #self.glowna_tabela_oswietlenia.dodaj_do_tabeli_jednorazowy_na_czas(NAZWA_SMIETNIK, CZAS_ZALACZENIA_SMIETNIKA)
+            self.glowna_tabela_oswietlenia.dodaj_do_tabeli_jednorazowy_na_czas(przek_smie.get_nazwa(),
+                                                                               przek_smie.get_defczaszalaczenia())
+            self.logger.info('Wlaczylem oswietlenie nad smietnikiem.')
         return
 
-    """def aktywuj_schematy(self):
-        if not self.oswietlenie_zimowe_aktywne:
-            self.uruchom_oswietlenie_zimowe(False)
-        else:
-            self.uruchom_oswietlenie_zimowe(True)
-        if not self.oswietlenie_jadalnia_aktywne:
-            self.uruchom_oswietlenie_jadalnia(False)
-        else:
-            self.uruchom_oswietlenie_jadalnia(True)
-        return"""
+    def stan_oswietlenia_do_tuple(self):
+        self.stan_oswietlenia = {constants.CYKLE: self.glowna_tabela_oswietlenia.pozycje_do_listy(),
+                                 constants.ODBIORNIKI: self.prze.pozycje_do_listy(),
+                                 constants.TS: self.ts}
 
-    def odczytuj_tablice_oswietlenia_cyklicznie(self):
-        self.odczytaj_tablice_oswietlenia()
-        threading.Timer(self.czas_odswiezania_petli, self.odczytuj_tablice_oswietlenia_cyklicznie).start()
+    def aktualizuj_biezacy_stan_oswietlenia(self):
+        #temp = deepcopy(self.stan_oswietlenia)
+        try:
+            temp = self.stan_oswietlenia[constants.TS]
+        except KeyError:
+            temp = 0
+        self.stan_oswietlenia_do_tuple()
+        #temp2 = deepcopy(self.stan_oswietlenia)
+        #if len(temp) > 0:
+        #    temp.pop(constants.CYKLE)
+        #temp2.pop(constants.CYKLE)
+        if temp != self.ts:
+            if self.firebase_callback is not None:
+                #oo = THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_OSWIETLENIA,
+                #                                    self.stan_oswietlenia, constants.STATUS_OK)
+                self.firebase_callback()
+                #print 'fire z osweitlenia'
+            #thread.start_new_thread(self.notyfikacja_firebase.notify, (constants.OBSZAR_OSWI, constants.FIREBASE_KOMUNIKAT_OSWIETLENIE))
+        return
 
-    def odczytaj_tablice_oswietlenia(self):
-        result = THutils.odczytaj_cala_tabele("stacja_pogodowa.petle")
-        if not result:
-            self.logger.warning('Blad odczytu tabeli z oswietleniem z bazy danych.')
-            return
-        self.glowna_tabela_oswietlenia.zeruj_tabele()
-        for item in result:
-            if item[7] == 'O':
-                if item[8] == 1:
-                    akt = True
-                else:
-                    akt = False
-                self.glowna_tabela_oswietlenia.dodaj_do_tabeli(item[0], item[2], item[3], item[4], item[5], item[1], akt)
-        # self.aktywuj_schematy()
-        self.odczytaj_konfiguracje()
-        self.logger.info('Odswiezylem tablice oswietlenia.')
-
-    def odczytaj_konfiguracje(self):
-        # self.oswietlenie_zimowe_aktywne = False
-        # self.oswietlenie_jadalnia_aktywne = True
-        a = THutils.odczytaj_parametr_konfiguracji('OSWIETLENIE', NAZWA_JADALNIA, self.logger)
-        if a in ['True', 'true', 'TRUE']:
-            self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(NAZWA_JADALNIA, True)
-            # self.oswietlenie_jadalnia_aktywne = True
-        else:
-            self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(NAZWA_JADALNIA, False)
-            # self.oswietlenie_jadalnia_aktywne = False
-        a = THutils.odczytaj_parametr_konfiguracji('OSWIETLENIE', NAZWA_ZIMOWE, self.logger)
-        if a in ['True', 'true', 'TRUE']:
-            self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(NAZWA_ZIMOWE, True)
-            # self.oswietlenie_zimowe_aktywne = True
-        else:
-            # self.oswietlenie_zimowe_aktywne = False
-            self.glowna_tabela_oswietlenia.aktywuj_pozycje_nazwa(NAZWA_ZIMOWE, False)
-        self.czas_odswiezania_petli = int(THutils.odczytaj_parametr_konfiguracji('OSWIETLENIE', 'CZAS_ODSWIEZANIA_PETLI', self.logger))
+    def odczytaj_konf(self):
+        #self.czas_odswiezania_petli = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_OSWI, 'CZAS_ODSWIEZANIA_PETLI', self.logger))
         return
