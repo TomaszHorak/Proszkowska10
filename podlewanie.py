@@ -68,9 +68,7 @@ class Podlewanie:
         self.czas_odczytu_konfig = 6000
         self.odczytaj_konf()
         self.glowna_tabela_podlewania.aktywuj_petle(True)
-
         self.prze.wylacz_wszystkie_przekazniki()
-
         self.aktualizuj_biezacy_stan_podlewania()
         self.logger.info('Zainicjowalem klase podlewanie.')
 
@@ -91,6 +89,7 @@ class Podlewanie:
                     self.glowna_tabela_podlewania.dodaj_do_tabeli_jednorazowy_na_czas(str(parametr1), int(parametr2))
                     self.logger.info('Podlewanie ' + parametr1 + ' wlaczylem na czas: ' + parametr2)
             self.ts = int(time.time())
+            self.odpal_firebase()
         elif komenda == constants.AKTYWACJA_SCHEMATU:  # odbiornik w petli sterowanie, aktywacja schematu
             if parametr2 == constants.PARAMETR_WLACZ:
                 wl = True
@@ -135,6 +134,7 @@ class Podlewanie:
                 self.logger.info('Podlewanie ' + nazwa + ', stan: ' + str(stan))
                 self.ts = int(time.time())
                 self.aktualizuj_biezacy_stan_podlewania()
+                self.odpal_firebase()
 
     def przebieg_petli(self):
         # wywolywane za kazdym przebiegiem petli, bez wzgledu na to czy byla zmiana stanu czy nie
@@ -147,6 +147,8 @@ class Podlewanie:
             self.logger.info('Podlewanie: Plywak Szambo: ' + str(self.plywak_szambo))
             self.poprzedni_stan_plywak_szambo = self.plywak_szambo
             self.ts = int(time.time())
+        if self.glowna_tabela_podlewania.czy_ktorykolwiek_wlaczony():
+            self.ts = int(time.time())
         self.aktualizuj_biezacy_stan_podlewania()
 
     def odczytaj_stan_plywakow(self):
@@ -156,32 +158,23 @@ class Podlewanie:
         self.aktualizuj_biezacy_stan_podlewania()
 
     def aktualizuj_biezacy_stan_podlewania(self):
-        #temp = deepcopy(self.stan_podlewania)
-        try:
+        '''try:
             temp = self.stan_podlewania[constants.TS]
         except KeyError:
-            temp = 0
-        #if len(temp) > 0:
-        #    temp.pop(constants.CYKLE)
+            temp = 0'''
         self.stan_podlewania = {'plywak_studnia':THutils.xstr(self.plywak_studnia),
                                 'plywak_szambo':THutils.xstr(self.plywak_szambo),
                                 'podlewanie_aktywne':self.podlewanie_aktywne,
-                                'ts_podlewania': self.ts,
+                                constants.TS: self.ts,
                                 constants.CYKLE: self.glowna_tabela_podlewania.pozycje_do_listy(),
-                                constants.ODBIORNIKI: self.prze.pozycje_do_listy(),
-                                constants.TS: self.ts}
-
-        #temp2 = deepcopy(self.stan_podlewania)
-        #if len(temp2) > 0:
-        #    temp2.pop(constants.CYKLE)
-        if temp != self.ts:
-            if self.firebase_callback is not None:
-                #oo = THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_PODLEWANIA,
-                #                                    self.stan_podlewania, constants.STATUS_OK)
-                self.firebase_callback()
-                #print 'fire z podlewania'
-                #thread.start_new_thread(self.notyfikacja_firebase.notify, (constants.OBSZAR_PODL, constants.FIREBASE_KOMUNIKAT_PODLEWANIE))
+                                constants.ODBIORNIKI: self.prze.pozycje_do_listy()}
+        '''if temp != self.ts:
+            self.odpal_firebase()'''
         return
+
+    def odpal_firebase(self):
+        if self.firebase_callback is not None:
+            self.firebase_callback()
 
     def odczytaj_konf(self):
         # self.czas_zmiany_sekcji = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_PODL, 'CZAS_ZMIANY_SEKCJI', self.logger))

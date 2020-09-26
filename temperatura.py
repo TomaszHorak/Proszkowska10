@@ -119,7 +119,7 @@ class temperatura:
 
     def zapisz_temp_do_bazy(self):
         try:
-            db = MySQLdb.connect(host = "localhost", user = "root", passwd = "west1west1", db = "stacja_pogodowa")
+            db = MySQLdb.connect(host = "localhost", user = "root", passwd = constants.PWD_BAZY, db = "stacja_pogodowa")
             cur = db.cursor()
             cur.execute("""INSERT INTO stacja_pogodowa.temperatura(outside,wilgotnosc_out,inside,wilgotnosc_in,wilgotnosc_gleby) VALUES (%s, %s, %s, %s, %s)""", (self.temp_out, self.wilg_out, self.temp_in, self.wilg_in, self.wilg_gleby))
             db.commit()
@@ -149,9 +149,11 @@ class temperatura:
         #temp = self.temp_out
         self.odczytaj_temperature()
 
+        self.aktualizuj_stan_temperatury()
         #TODO tutaj trzeba przeniesc cykliczne resetowanie czujnika temperatury z mysocket do temperatury
         if int(round(temp)) != int(round(self.temp_out)):
             self.ts = int(time.time())
+	    self.aktualizuj_stan_temperatury()
             # self.logger.info("Zmiana w temperaturze, informuje klientow za pomoca Firebase. Poprzednio bylo: "
             #                + str(temp) + " a teraz jest " + str(self.temp_out))
 
@@ -160,9 +162,10 @@ class temperatura:
             if self.firebase_callback is not None:
                 #oo = THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY,
                 #                                    self.stan_temperatury, constants.STATUS_OK)
+                self.logger.info('Odpalam firebase z temperatury: ' + str(self.temp_out))
                 self.firebase_callback()
                 #print 'fire z temperatury'
-        self.aktualizuj_stan_temperatury()
+
         self.zapisz_temp_do_bazy()
         threading.Timer(self.odstep_odczytu_temperatury, self.pobieraj_temperature_cyklicznie).start()
 

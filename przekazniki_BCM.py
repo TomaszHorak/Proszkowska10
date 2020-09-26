@@ -42,7 +42,7 @@ class Przekaznik:
         return self.nazwa
 
     def do_listy(self):
-        a = {constants.PRZEKAZNIK_NAZWA: self.nazwa,
+        a = {constants.NAZWA: self.nazwa,
              constants.PRZEKAZNIK_STAN: self._stan,
              constants.PRZEKAZNIK_IMPULS: self._impuls,
              constants.PRZEKAZNIK_CZAS_IMPULSU: self.czas_impulsu,
@@ -74,8 +74,8 @@ class PrzekaznikiBCM:
         self.__pin = []
         try:
             for item in c:
-                if constants.PRZEKAZNIK_NAZWA in item:
-                    nazwa = item[constants.PRZEKAZNIK_NAZWA]
+                if constants.NAZWA in item:
+                    nazwa = item[constants.NAZWA]
                 else:
                     nazwa = None
                 if constants.PRZEKAZNIK_IMPULS in item:

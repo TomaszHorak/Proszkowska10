@@ -1,18 +1,17 @@
-#import tunein
-#import openfm
-#import rmf
+# TODO urrlib do usuniecia , przejscie na requets
 import urllib2
-import simplejson as json
+import requests
+import json
 import thread
 import threading
-import xmltodict
+import constants
 import xml.etree.ElementTree
-import THutils
 import ConfigParser
-import time
 import os
 import xml.dom.minidom as minidom
 import logging
+import time
+from THutils import skonstruuj_odpowiedzV2
 
 #struktura danych o radiach
 #nr - numer serwisu: 0-openfm, 1-rmf fm, 2, tunein
@@ -22,6 +21,12 @@ NAZWA_SERWISU_OPENFM = 'Open FM'
 NAZWA_SERWISU_RMFFM = 'RMF FM'
 NAZWA_SERWISU_TUNEIN = 'TuneIn'
 NAZWA_SERWISU_POLSKIERADIO = 'Polskie Radio'
+
+SERWIS = 'serwis'
+# NAZWA = 'nazwa'
+LINK = 'link'
+LOGO = 'logo'
+GRUPA = 'grupa'
 
 CZAS_POBIERANIA_RADI_CYKLICZNIE = 85000
 
@@ -33,22 +38,30 @@ CZAS_POBIERANIA_RADI_CYKLICZNIE = 85000
 #logo - link do loga stacji
 #grupa - grupy stacji, do ktorych nalezy dana stacja
 
+# TODO przejscie na klase radio z metodami typu get_name
 class Radia:
     def __init__(self):
-        #self.katalog_serwisow = [{'nr':'1', 'nazwa':'Open FM'}, {'nr':'2', 'nazwa':'RMF FM'}, {'nr':'3', 'nazwa':'TuneIn'}]
         self.stacje = []
-        self.logger = logging.getLogger('proszkowska')
-
+        self.ts = int(time.time())
+        self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
         self.pobierz_radia_cyklicznie()
-        return
 
     def pobierz_radia_cyklicznie(self):
         thread.start_new_thread(self.aktualizuj_stacje, ())
         threading.Timer(CZAS_POBIERANIA_RADI_CYKLICZNIE, self.pobierz_radia_cyklicznie).start()
 
     def wyslij_katalog_radii(self):
-        odp = json.dumps({'Katalog_radii':self.stacje})
-        return odp
+        katalog = []
+        for a in self.stacje:
+            katalog.append({SERWIS:a[SERWIS],
+                            constants.NAZWA:a[constants.NAZWA],
+                            GRUPA:a[GRUPA],
+                            LOGO:a[LOGO],
+                            constants.ID:a[constants.ID]})
+        dane = {constants.TS: self.ts,
+                constants.POZYCJE: katalog}
+        return skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_KATALOG_RADII, dane, constants.STATUS_OK)
+
 
     def aktualizuj_stacje(self):
         self.stacje = []
@@ -58,18 +71,30 @@ class Radia:
         self.dodaj_stacje_polskieradio()
         self.logger.info('Zaktualizowalem liste radii. Liczba stacji: ' +
                          str(len(self.stacje)))
+        self.ts = int(time.time())
         return
 
     def dodaj_stacje(self, nazwa_serwisu, id, nazwa, link, logo, grupy):
-        js = json.dumps(grupy)
-        self.stacje.append({'serwis': nazwa_serwisu, 'id': id, 'nazwa': nazwa, 'link': link, 'logo': logo, 'grupa':js})
+        #js = json.dumps(grupy)
+        # TODO self.stacje powinno byc tabela klasy stacja radiowa a nie tuplem
+        self.stacje.append({SERWIS: nazwa_serwisu, constants.ID: id, constants.NAZWA: nazwa, LINK: link,
+                            LOGO: logo, GRUPA:grupy})
         return
 
-    def znajdz_stacje(self, nazwa_serw, nazwa_sta):
+    def znajdz_stacje_po_nazwie_i_serwisie(self, nazwa_serw, nazwa_sta):
         for a in self.stacje:
-            if a['serwis'] == nazwa_serw and a['nazwa'] == nazwa_sta:
+            if a[SERWIS] == nazwa_serw and a[constants.NAZWA] == nazwa_sta:
                 return a
         return None
+
+    def znajdz_stacje_po_nazwie_i_id(self, nazwa_serw, id_stacji):
+        for a in self.stacje:
+            if a[SERWIS] == nazwa_serw and a[constants.ID] == id_stacji:
+                return a
+        return None
+
+
+    # TODO wysylajac liste radii to grupy w kazdej pozycji powinny byc arrayem a nie rozkodowanym JSON
 
     def parse_asf(self, url):
         streams = []
@@ -103,7 +128,7 @@ class Radia:
                         elif (str(subnode.localName).lower() == 'ref' and subnode.hasAttribute('HREF') and not subnode.getAttribute('HREF') in streams):
                             streams.append(subnode.getAttribute('HREF'))
             f.close()
-        except (urllib2.HTTPError) as serr:
+        except (Exception) as serr:
             self.logger.warning('Nie moge parsowac ASX. Blad: ' + str(serr))
         return streams
 
@@ -135,8 +160,7 @@ class Radia:
                 numentries -= 1
             f.close()
         except (urllib2.URLError, urllib2.HTTPError, ConfigParser.NoSectionError, ConfigParser.NoOptionError, ConfigParser.MissingSectionHeaderError) as serr:
-            self.logger.warning('Blad podczas parsowania PLS. Blad: ' + str(serr))
-            return None
+            self.logger.warning('Blad podczas parsowania PLS. Link: ' + str(url))
         return streams
 
     def dodaj_renderjson(self, link):
@@ -150,9 +174,14 @@ class Radia:
                 #    li = self.dodaj_renderjson(j['URL'])
                 #    self.dodaj_stacje_tunein_zjson(nazwa_grupy, self.odczytaj_liste_stacji_tunein(li))
                 #else:
+                link_stacja = ''
                 if j['type'] == 'audio':
                     if j['item'] == 'station':
+                        #link_stacja = self.tunein_dekoduj_stream_stacji(j['URL'])
                         link_stacja = j['URL']
+                        #if link_stacja == '':
+                        #    print 'nie ma linku'
+                        #    self.logger.warning('Nie ma linku stacji : ' + str(j))
                         nazwa_stacji = j['text']
                         id_stacji = j['guide_id']
                         logo = j['image']
@@ -174,9 +203,8 @@ class Radia:
         # filepath = filepath.lower()
         # filename = filename.lower()
         # shortname = shortname.lower()
-        extension = extension.lower()
+        extension = extension.lower().split('?',1)[0]
         m3usy = []
-        m3usy.append(link_stacja)
         if extension == '.pls':
             m3usy = self.parse_pls(link_stacja)
         elif extension == '.m3u':
@@ -187,9 +215,19 @@ class Radia:
             m3usy = self.parse_asf(link_stacja)
             # TODO dorobic parsing .st, w logu z dnia 16.11.2018
         else:
+            m3usy.append(link_stacja)
+        #elif extension == '.mp3':
+        #    m3usy.append(link_stacja)
+        #elif extension == '.audio':
+        #    m3usy.append(link_stacja)
+        #else:
             #THutils.zapisz_do_logu_plik('E', 'TuneIn stacja bez linku : ' + str(link_stacja))
+        #    self.logger.warning('TuneIn stacja bez linku : ' + str(link_stacja))
+        if len (m3usy) == 0:
             self.logger.warning('TuneIn stacja bez linku : ' + str(link_stacja))
-        return m3usy[0]
+            return ''
+        else:
+            return m3usy[0]
 
     # TODO przekopiowac z tunein.py, jest na pulpicie wszystkie funckje z describe aby dowiadywac sie co aktualnie grane
     # TODO przekopiowac tez searcha
@@ -213,34 +251,36 @@ class Radia:
         return js
 
     def dodaj_stacje_tunein(self):
-        lista_grup = self.tunein_odczytaj_liste_grup("http://opml.radiotime.com/Browse.ashx?c=music&render=json&partnerid=HyzqumNX")['body']
-        if len(lista_grup) == 0:
-            return
+        try:
+            lista_grup = self.tunein_odczytaj_liste_grup("http://opml.radiotime.com/Browse.ashx?c=music&render=json&partnerid=HyzqumNX")['body']
+            if len(lista_grup) == 0:
+                return
 
-        for j in lista_grup:
-            # ta sekcja dodaje dodatkowe stacje krajowe z kategorii World Music
-            if j['text'] == 'World Music':
-                lista_grup_world = self.tunein_odczytaj_liste_grup(self.dodaj_renderjson(j['URL']))
-                for aa in lista_grup_world['body'][2]['children']:
-                    self.dodaj_tunein_outline(aa)
-            self.dodaj_tunein_outline(j)
-            """if j['type'] == 'link':
-                nazwa_grupy = j['text']
-                link_grupa = self.dodaj_renderjson(j['URL'])
-                try:
-                    result = str(urllib2.urlopen(link_grupa).read())
-                    js = json.JSONDecoder().decode(result)
-                    lista_stacji = js['body'][0]
-                    self.dodaj_stacje_tunein_zjson(nazwa_grupy, lista_stacji['children'])
-                    #ta sekcja dodaje dodatkowe stacje krajowe z kategorii World Music
-                    if nazwa_grupy == 'World Music':
-                        lista_stacji = js['body'][2]
+            for j in lista_grup:
+                # ta sekcja dodaje dodatkowe stacje krajowe z kategorii World Music
+                if j['text'] == 'World Music':
+                    lista_grup_world = self.tunein_odczytaj_liste_grup(self.dodaj_renderjson(j['URL']))
+                    for aa in lista_grup_world['body'][2]['children']:
+                        self.dodaj_tunein_outline(aa)
+                self.dodaj_tunein_outline(j)
+                """if j['type'] == 'link':
+                    nazwa_grupy = j['text']
+                    link_grupa = self.dodaj_renderjson(j['URL'])
+                    try:
+                        result = str(urllib2.urlopen(link_grupa).read())
+                        js = json.JSONDecoder().decode(result)
+                        lista_stacji = js['body'][0]
                         self.dodaj_stacje_tunein_zjson(nazwa_grupy, lista_stacji['children'])
-                    #koniec sekcji dodawania world music
-                except (urllib2.URLError, urllib2.HTTPError) as serr:
-                    THutils.zapisz_do_logu_plik('E', 'Blad podczas odczytu z tunein.... Blad: ' + str(serr))"""
-        #THutils.zapisz_do_logu_plik('I', 'Dodalem stacje TuneIn.')
-        self.logger.info('Dodalem stacje TuneIn.')
+                        #ta sekcja dodaje dodatkowe stacje krajowe z kategorii World Music
+                        if nazwa_grupy == 'World Music':
+                            lista_stacji = js['body'][2]
+                            self.dodaj_stacje_tunein_zjson(nazwa_grupy, lista_stacji['children'])
+                        #koniec sekcji dodawania world music
+                    except (urllib2.URLError, urllib2.HTTPError) as serr:
+                        THutils.zapisz_do_logu_plik('E', 'Blad podczas odczytu z tunein.... Blad: ' + str(serr))"""
+            self.logger.info('Dodalem stacje TuneIn.')
+        except TypeError as serr:
+            self.logger.warning('Nie moge odczytac stacji TuneIn: ' + str(serr))
         return
 
     def dodaj_tunein_outline(self, outline):
@@ -249,9 +289,18 @@ class Radia:
             nazwa_grupy = outline['text']
             link_grupa = self.dodaj_renderjson(outline['URL'])
             try:
-                result = str(urllib2.urlopen(link_grupa).read())
-                js = json.JSONDecoder().decode(result)
-                lista_stacji = js['body'][0]
+                #result = str(urllib2.urlopen(link_grupa).read())
+                # TODO pozbyc sie wszystkich urlopen
+                result = requests.get(link_grupa).text
+                js = json.loads(result)
+                lista_stacji = []
+                try:
+                    for a in js['body']:
+                        if a['key'] == 'stations':
+                            lista_stacji = a
+                            break
+                except IndexError:
+                    self.logger.warning('Brak sekcji body: ' + str(js))
                 try:
                     self.dodaj_stacje_tunein_zjson(nazwa_grupy, lista_stacji['children'])
                 except KeyError as serr:
@@ -263,8 +312,6 @@ class Radia:
 
 
     def tunein_odczytaj_link_stacji(self, link):
-        # TODO to jest do usuniecia chyba
-        time.sleep(0.5)
         link_stacji = ''
         try:
             li = self.dodaj_renderjson(link)
@@ -288,7 +335,7 @@ class Radia:
         #grupy = result_object["groups"]
         #nazwa_grupy = ''
         for a in stacje:
-            id = a['id']
+            id = a[constants.ID]
             nazwa = a['title']
             link = ''
             logo = a['image']
@@ -336,7 +383,7 @@ class Radia:
         grupy = grupyx.getiterator('category')
         for j in stacje:
             nazwa_stacji = j.get('name')
-            id_stacji = j.get('id')
+            id_stacji = j.get(constants.ID)
             for a in st_json:
                 if id_stacji == a['id']:
                     idname = a['idname']
@@ -390,7 +437,7 @@ class Radia:
 
     """def znajdz_link(self, link, tekst):
         result = self.odczytaj_xml(link)
-        if result==None:
+        if result is None:
             return None
         a = result.find('body')
         x = a.getiterator('outline')

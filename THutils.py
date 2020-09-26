@@ -15,8 +15,6 @@ import configparser
 import requests
 import sys
 
-#TODO plik logi chyba trzeba przerobic na logger
-# PLIK_LOGU = '/home/pi/python/system_podlewania/mysocket.log'
 PLIK_CONFIGU = '/config.ini'
 HOST_BAZY_DANYCH = "192.168.5.99"
 
@@ -101,7 +99,7 @@ def odczytaj_temp_z_socketa():
 
 def zwroc_baze():
     try:
-        my_db = MySQLdb.connect(host=HOST_BAZY_DANYCH, user="root", passwd="west1west1", db="stacja_pogodowa")
+        my_db = MySQLdb.connect(host=constants.IP_GARAZ, user="root", passwd=constants.PWD_BAZY, db="stacja_pogodowa")
         return my_db
     except MySQLdb, e:
         print "Blad podlaczenia do bazy"
@@ -220,9 +218,6 @@ def xstr(s):
 
 def odczytaj_biezaca_temperature_z_bazy():
     try:
-        # print "odczytue temperature"
-        # threading.Timer(200, self.odczytaj_biezaca_temperature_z_bazy).start()
-        # db = MySQLdb.connect(host="localhost", user="root", passwd="west1west1", db="stacja_pogodowa")
         db = zwroc_baze()
         cur = db.cursor()
         cur.execute(
@@ -265,7 +260,6 @@ def odczytaj_log_plik(plik, liczba_linii):
 
 def zapisz_do_logu_baza(kto_lp, obszar_lp, kategoria_lp, wartosc_lp):
     try:
-        # db = MySQLdb.connect(host="localhost", user="root", passwd="west1west1", db="stacja_pogodowa")
         db = zwroc_baze()
         cur = db.cursor()
         cur.execute("""INSERT INTO stacja_pogodowa.log(kto,obszar,kategoria, wartosc) VALUES (%s, %s, %s, %s)""",
@@ -279,7 +273,6 @@ def zapisz_do_logu_baza(kto_lp, obszar_lp, kategoria_lp, wartosc_lp):
 
 def odczytaj_caly_log_z_bazy():
     try:
-        # db = MySQLdb.connect(host="localhost", user="root", passwd="west1west1", db="stacja_pogodowa")
         db = zwroc_baze()
         cur = db.cursor()
         cur.execute("""SELECT * FROM stacja_pogodowa.log ORDER BY czas DESC LIMIT 100""")

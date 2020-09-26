@@ -9,7 +9,7 @@ import constants
 MY_API_KEY="AAAA0FewZwk:APA91bFG2zaE077_ztGG6g9oFd3jDUJCu3GbvM2XiJpDn2Fxjii5CkEZMkvADSQ0KAVK_7bfVwpGb_p6zeDznoRgJ_4sefLE3oBbTOWlk57Dl3ESsggfQ2Liiuk0RS47M3jJ1KSB2Rfn"
 
 class Firebasenotification():
-    #cred = firebase_admin.credentials.Certificate("/home/pi/python/system_podlewania/proszkowska10-firebase.json")
+    #cred = firebase_admin.credentials.Certificate(constants.KATALOG_GLOWNY + "/proszkowska10-firebase.json")
     #default_app = firebase_admin.initialize_app(cred)
 
     def __init__(self):

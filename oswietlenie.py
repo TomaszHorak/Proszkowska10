@@ -63,7 +63,7 @@ class Oswietlenie:
 
         self.glowna_tabela_oswietlenia = petlaczasowa.PetlaCzasowa(constants.OBSZAR_OSWI,
                                                                    self.dzialanie_petli,
-                                                                   callback=self.aktualizuj_biezacy_stan_oswietlenia,
+                                                                   callback=self.przebieg_petli,
                                                                    logger=self.logger)
         #TODO do parametrow czas_uruchomienia_petli
         # TODO co to jest ponizsze?
@@ -78,10 +78,10 @@ class Oswietlenie:
         self.prze.ustaw_przekaznik_nazwa(NAZWA_OGNISKO, False)
         self.prze.ustaw_przekaznik_nazwa(NAZWA_JADALNIA, False)
 
-        self.stan_oswietlenia_do_tuple()
+        self.aktualizuj_biezacy_stan_oswietlenia()
         self.glowna_tabela_oswietlenia.aktywuj_petle(True)
 
-        self.aktualizuj_biezacy_stan_oswietlenia()
+
         self.logger.info('Zainicjowalem klase oswietlenie.')
 
     def wejscie_callback(self, pin, nazwa, stan):
@@ -104,6 +104,8 @@ class Oswietlenie:
             self.prze.toggle_przekaznik_nazwa(parametr1)
             self.ts = int(time.time())
             self.logger.info('Oswietlenie ' + parametr1 + ' toggle.')
+            if self.firebase_callback is not None:
+                self.firebase_callback()
         elif komenda == constants.AKTYWACJA_SCHEMATU:  # odbiornik w petli sterowanie, aktywacja schematu
             if parametr2 == constants.PARAMETR_WLACZ:
                 wl = True
@@ -119,6 +121,12 @@ class Oswietlenie:
         return skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_OSWIETLENIA,
                                        self.stan_oswietlenia, constants.STATUS_OK)
 
+    def przebieg_petli(self):
+        # wywolywane za kazdym przebiegiem petli, bez wzgledu na to czy byla zmiana stanu czy nie
+        if self.glowna_tabela_oswietlenia.czy_ktorykolwiek_wlaczony():
+            self.ts = int(time.time())
+        self.aktualizuj_biezacy_stan_oswietlenia()
+
     def dzialanie_petli(self, nazwa, stan):
         stan_poprzzedni = self.prze.stan_przekaznika_nazwa(nazwa)
         self.prze.ustaw_przekaznik_nazwa(nazwa, stan)
@@ -126,6 +134,8 @@ class Oswietlenie:
             self.ts = int(time.time())
             self.logger.info('Oswietlenie ' + nazwa + ', stan: ' + str(stan))
             self.aktualizuj_biezacy_stan_oswietlenia()
+            if self.firebase_callback is not None:
+                self.firebase_callback()
 
     def wlacz_smietnik_samodzielny(self):
         przek_smie = self.prze.przekaznik_po_nazwie(NAZWA_SMIETNIK)
@@ -136,29 +146,27 @@ class Oswietlenie:
             self.logger.info('Wlaczylem oswietlenie nad smietnikiem.')
         return
 
-    def stan_oswietlenia_do_tuple(self):
+    def aktualizuj_biezacy_stan_oswietlenia(self):
+        #temp = deepcopy(self.stan_oswietlenia)
+        '''try:
+            temp = self.stan_oswietlenia[constants.TS]
+        except KeyError:
+            temp = 0'''
         self.stan_oswietlenia = {constants.CYKLE: self.glowna_tabela_oswietlenia.pozycje_do_listy(),
                                  constants.ODBIORNIKI: self.prze.pozycje_do_listy(),
                                  constants.TS: self.ts}
-
-    def aktualizuj_biezacy_stan_oswietlenia(self):
-        #temp = deepcopy(self.stan_oswietlenia)
-        try:
-            temp = self.stan_oswietlenia[constants.TS]
-        except KeyError:
-            temp = 0
-        self.stan_oswietlenia_do_tuple()
+        #self.stan_oswietlenia_do_tuple()
         #temp2 = deepcopy(self.stan_oswietlenia)
         #if len(temp) > 0:
         #    temp.pop(constants.CYKLE)
         #temp2.pop(constants.CYKLE)
-        if temp != self.ts:
+        '''if temp != self.ts:
             if self.firebase_callback is not None:
                 #oo = THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_OSWIETLENIA,
                 #                                    self.stan_oswietlenia, constants.STATUS_OK)
                 self.firebase_callback()
                 #print 'fire z osweitlenia'
-            #thread.start_new_thread(self.notyfikacja_firebase.notify, (constants.OBSZAR_OSWI, constants.FIREBASE_KOMUNIKAT_OSWIETLENIE))
+            #thread.start_new_thread(self.notyfikacja_firebase.notify, (constants.OBSZAR_OSWI, constants.FIREBASE_KOMUNIKAT_OSWIETLENIE))'''
         return
 
     def odczytaj_konf(self):

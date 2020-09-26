@@ -23,6 +23,12 @@ class PetlaCzasowa:
         self._odczytaj_cykle_z_konfiguracji_cyklicznie()
         self._petla()
 
+    def czy_ktorykolwiek_wlaczony(self):
+        for a in self._tabela:
+            if a.get_stan():
+                return True
+        return False
+
     def _petla(self):
         self._petla_w_trakcie_przebiegu.acquire()
         if self._petla_aktywna:

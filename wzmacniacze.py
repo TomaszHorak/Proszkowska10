@@ -13,16 +13,27 @@ NAZWA_WZMACNIACZA_LAZIENKA = "Lazienka"
 NAZWA_WZMACNIACZA_SYPIALNIA = "Sypialnia"
 NAZWA_WZMACNIACZA_BALKON = "Balkon"
 NAZWA_WZMACNIACZA_DENON = "Denon"
+PIN_WZMACNIACZA_KUCHNIA = 7
+PIN_WZMACNIACZA_TARAS = 6
+PIN_WZMACNIACZA_LAZIENKA = 5
+PIN_WZMACNIACZA_SYPIALNIA = 3
+PIN_WZMACNIACZA_BALKON = 4
 
 
 class Wzmacniacze:
     def __init__(self, mcp, logger):
-        tab = [{'numer': NR_WZMACNIACZA_KUCHNIA, 'nazwa': NAZWA_WZMACNIACZA_KUCHNIA, 'pin': 7},
+        """tab = [{'numer': NR_WZMACNIACZA_KUCHNIA, 'nazwa': NAZWA_WZMACNIACZA_KUCHNIA, 'pin': 7},
                {'numer': NR_WZMACNIACZA_TARAS, 'nazwa': NAZWA_WZMACNIACZA_TARAS, 'pin': 6},
                {'numer': NR_WZMACNIACZA_LAZIENKA, 'nazwa': NAZWA_WZMACNIACZA_LAZIENKA, 'pin': 5},
                {'numer': NR_WZMACNIACZA_SYPIALNIA, 'nazwa': NAZWA_WZMACNIACZA_SYPIALNIA, 'pin': 3},
-               {'numer': NR_WZMACNIACZA_BALKON, 'nazwa': NAZWA_WZMACNIACZA_BALKON, 'pin': 4}]
-        self.przek = przekazniki_BCM.PrzekaznikiBCM(mcp, tab)
+               {'numer': NR_WZMACNIACZA_BALKON, 'nazwa': NAZWA_WZMACNIACZA_BALKON, 'pin': 4}]"""
+        self.przek = przekazniki_BCM.PrzekaznikiBCM(mcp)
+        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_KUCHNIA, PIN_WZMACNIACZA_KUCHNIA)
+        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_TARAS, PIN_WZMACNIACZA_TARAS)
+        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_LAZIENKA, PIN_WZMACNIACZA_LAZIENKA)
+        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_SYPIALNIA, PIN_WZMACNIACZA_SYPIALNIA)
+        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_BALKON, PIN_WZMACNIACZA_BALKON)
+
         self.wzmacniacze = []
         self.wzmacniacze.append(tda8425.TDA8425(NR_WZMACNIACZA_KUCHNIA, NAZWA_WZMACNIACZA_KUCHNIA))
         self.wzmacniacze.append(tda8425.TDA8425(NR_WZMACNIACZA_TARAS, NAZWA_WZMACNIACZA_TARAS))
