@@ -11,16 +11,20 @@ from random import getrandbits
 
 class PozycjaUubionego(playlista.Playlista):
     def __init__(self, nazwa, pozycje, plik):
-        super(PozycjaUubionego, self).__init__(nazwa=nazwa, pozycje=pozycje)
-        # self._nr = numer
+        super(PozycjaUubionego, self).__init__(nazwa=nazwa)
+        self.pozycje = pozycje
         self._nr = getrandbits(32)
         self._plik = plik
         return
 
     def pozycja_do_listy(self, pelna=False):
+        play = self.pozycje[0]  # type: playlista.PozycjaPlaylisty
         pozycja = {constants.NR: self._nr,
-                   'plik': self._plik,
-                   constants.POZYCJE: self.wyslij_playliste(pelna=pelna)}
+                   constants.FANART: play.fanart,
+                   constants.NAZWA: self.nazwa,
+                   playlista.TYP: self.pozycje[0].typ,
+                   playlista.LICZBA_POZYCJI: self.liczba_pozycji()}
+                   #constants.POZYCJE: self.wyslij_playliste(pelna=pelna)}
         return pozycja
 
     def get_numer(self):
@@ -79,11 +83,14 @@ class Ulubione:
 
     def wyslij_ulubione(self, pelna=False):
         pozy = []
-        for p in self.ulubione:
+        for p in self.ulubione: # type: PozycjaUubionego
             pozy.append(p.pozycja_do_listy(pelna=pelna))
+#            x = {p.pozycja_do_listy(pelna=pelna),
+#                 constants.FANART: p.get_nazwa()}
+#            pozy.append(x)
         dane = {constants.TS: self.ts,
                constants.POZYCJE: pozy}
-        return THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_ULUBIONE, dane, constants.STATUS_OK)
+        return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_ULUBIONE, dane)
 
     def arduino_wyslij_ulubione(self):
         dane = ''

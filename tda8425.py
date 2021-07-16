@@ -5,8 +5,6 @@
 # This code is provided to help with programming the TDA chip.
 
 import smbus
-import time
-
 
 MAX_GLOSNOSC = 62
 MIN_GLOSNOSC = 26
@@ -51,8 +49,9 @@ class TDA8425:
         self.numer = nr_przedwz
         self.nazwa = nazwa
         self.nr_przedwz = (1 << nr_przedwz)
-        self.tda8425_vaules = [0x3C, 0x3C, 0xF6, 0xF6, 0xCE]
-        self.nr_wejscia = 1
+        self.tda8425_vaules = [0x3C, 0x3C, 0xF9, 0xF7, 0xCE]
+        #self.tda8425_vaules = [0x3C, 0x3C, 0xF6, 0xF6, 0xCE]
+        # self.nr_wejscia = 1
         # TODO przerobic glosnosc na _glosnosc i setter i getter
         self.glosnosc = 0
         self.init_chip()
@@ -75,6 +74,7 @@ class TDA8425:
         self.write_chip(TDA8425_SWITCH, self.tda8425_vaules[4])
         self.ustaw_glosnosc(GLOSNOSC_PRZY_INICJALIZACJI)
         self.select_input(1)
+
         self.mute_off()
 
     def set_param(self, param, value):
@@ -92,7 +92,7 @@ class TDA8425:
         self.tda8425_vaules[4] = self.tda8425_vaules[4] & ~SOURCE_MASK
         self.tda8425_vaules[4] = self.tda8425_vaules[4] | input_selected
         self.write_chip(TDA8425_SWITCH, self.tda8425_vaules[4])
-        self.nr_wejscia = input_selected
+        #self.nr_wejscia = input_selected
 
     def select_signal(self, input_selected):
         self.tda8425_vaules[4] = self.tda8425_vaules[4] & ~SIGNAL_MASK

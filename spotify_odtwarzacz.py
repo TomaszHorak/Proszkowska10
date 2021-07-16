@@ -2,7 +2,6 @@ import odtwarzacz
 import spotify_klasa
 import spotipy
 import requests
-import json
 # NAZWA_KLIENTA_SPOTIFY = 'Kodi Strych'  # taka sama podane w definicji klienta connect
 
 

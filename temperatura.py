@@ -1,125 +1,121 @@
 #!/usr/bin/python
 import constants
+import petlaczasowa
+import wejsciawyjscia
+import threading
 from THutils import odczytaj_parametr_konfiguracji
 
 try:
-    import threading
     import time
     import datetime
-    from multiprocessing.connection import Listener
     import atexit
     #import DHT22
     import pigpio
     import MySQLdb
-    #import Adafruit_DHT
-    from multiprocessing.connection import Client
     import THutils
+    import os
     import json
     import firebasenotification
     import thread
     import logging
     import przekazniki_BCM
+    from Obszar import Obszar
     from copy import deepcopy
-except (ImportError) as serr:
+except ImportError as serr:
     pass
-PORT_LOKALNY = 6050
+#PORT_LOKALNY = 6050
 
-class temperatura:
-    def __init__(self, mcp, firebase_callback=None):
-        self.mcp = mcp
+PRZEKAZNIK_RESETU_CZUJNIKA_TEMPERATURY = 'reset_czujn_temp'
+NAZWA_CYKLU_ODCZYTUJ_TEMPERATURE = 'odczytuj_temperature'
+
+class temperatura(Obszar):
+    def __init__(self,
+                 wewy,  # type: wejsciawyjscia.WejsciaWyjscia
+                 petla,  # type: petlaczasowa.PetlaCzasowa
+                 firebase_callback=None):
+
+        Obszar.__init__(self, wewy, petla, constants.OBSZAR_TEMP, firebase_callback=firebase_callback,
+                        rodzaj_komunikatu_firebase=constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY,
+                        callback_przekaznika_wyjscia=self.aktualizuj_biezacy_stan,
+#                        callback_wejscia=self.wejscie_callback,
+                        dzialanie_petli=self.dzialanie_petli
+                        )
+        nr_pinu = int(odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'PIN_PI_ODLACZANIE_ZASILANIA_CZUJNIKOW'))
+        #self.nazwa_przek = 'Reset czujn temp'
+        #self.dodaj_wejscie(PRZEKAZNIK_RESETU_CZUJNIKA_TEMPERATURY, nr_pinu)
+
+        self.dodaj_przekaznik(PRZEKAZNIK_RESETU_CZUJNIKA_TEMPERATURY, nr_pinu)
         self.temp_out = -99.9
         self.wilg_out = 0
         self.temp_in = -99.9
         self.wilg_in = 0
         self.wilg_gleby = 0
-        self.ts = 0
-        self.firebase_callback = firebase_callback
-        self.stan_temperatury = {}
+        # = int(time.time())
+        #self.firebase_callback = firebase_callback
+        #self.stan_temperatury = {}
         # self.pi = pigpio.pi()
-        self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
+        #self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
         self.nr_pinu = 4 #pozniej w konfiguracji jest odczytywana wartosc z pliku
- #       GPIO.setmode(GPIO.BCM)
+        #TODO przeniesc odczytywanie temperatury do petli, jako zadanie wywolywane z petli, jak sie uporam z cyklicznoscia petli
         self.odstep_odczytu_temperatury = 180
         # odstep w godzinach co ile ma byc odswiezana konfiguracja z bazy
-        self.czas_odczytu_konfig = 24
-        self.MOJE_IP = THutils.moje_ip('eth0')
+        # self.czas_odczytu_konfig = 24
         self.odczytaj_konf()
-        #self.odczytaj_konfiguracje_cyklicznie()
-        self.aktualizuj_stan_temperatury()
-        #self.nr_pinu = int(odczytaj_konfiguracje.odczytaj_konfiguracje_z_bazy('TEMP', 'PIN_PI_TEMPERATURA'))
-        #self.odstep_odczytu_temperatury = int(odczytaj_konfiguracje.odczytaj_konfiguracje_z_bazy('OGOLNE', 'ODST_ODCZ_TEMP'))
+        self.aktualizuj_biezacy_stan()
         self.s = sensor(self.nr_pinu, power=8)
-        THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODLACZANIA_CZUJNIKOW')
-        self.pobieraj_temperature_cyklicznie()
-        self.resetuj_czujniki_temperatury_cyklicznie()
+        #THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODLACZANIA_CZUJNIKOW')
+        #self.__pobieraj_temperature_cyklicznie()
+        #self.__resetuj_czujniki_temperatury_cyklicznie()
+
+    def dzialanie_petli(self, nazwa, stan, tylko_aktualizuj_ts=False):
+        if tylko_aktualizuj_ts:
+            return
+        if nazwa == PRZEKAZNIK_RESETU_CZUJNIKA_TEMPERATURY:
+            self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan)
+        if nazwa == NAZWA_CYKLU_ODCZYTUJ_TEMPERATURE:
+            if stan:
+                self.__pobieraj_temperature_cyklicznie()
+                #self.logger.info('Odczytywanie temparatury sterowane z petli')
+        #self.logger.info('Temperatura: dzialanie na zasialniu etmperatury: ' + nazwa +
+        #                 ' ' + str(stan))
+        #if tylko_aktualizuj_ts:
+        #    self.resetuj_ts()
 
     def procesuj_polecenie(self,komenda, parametr1, parametr2):
-        # self.aktualizuj_stan_temperatury()
-        return THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY,
-                                              self.stan_temperatury, constants.STATUS_OK)
+        return Obszar.procesuj_polecenie(self, komenda, parametr1, parametr2)
 
-    def aktualizuj_stan_temperatury(self):
-        dane = {}
-        dane['T_zewnatrz'] = self.temp_out
-        dane['W_zewnatrz'] = self.wilg_out
-        dane['T_wewnatrz'] = self.temp_in
-        dane['W_wewnatrz'] = self.wilg_in
-        dane['W_gleby'] = self.wilg_gleby
-        dane[constants.TS] = self.ts
-        self.stan_temperatury = dane
-
-    def zwroc_temperatury(self):
-        return self.stan_temperatury
-
-    def uruchom_serwer(self):
-        address = ('localhost', PORT_LOKALNY)  # family is deduced to be 'AF_INET'
-        listener = Listener(address, authkey='secret password')
-        while True:
-            conn = listener.accept()
-            msg = conn.recv()
-            if msg == 'close':
-                conn.close()
-            if msg == 'TEMP':
-                self.odczytaj_temperature()
-                conn.send(self.zwroc_temperatury())
+    def aktualizuj_biezacy_stan(self):
+        self._biezacy_stan = {'T_zewnatrz': self.temp_out,
+                                        'W_zewnatrz': self.wilg_out,
+                                        'T_wewnatrz': self.temp_in,
+                                        'W_wewnatrz': self.wilg_in,
+                                        'W_gleby': self.wilg_gleby,
+                                        constants.TS: self.ts}
 
     def odczytaj_konf(self):
         self.nr_pinu = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'PIN_PI_TEMPERATURA', self.logger))
         self.odstep_odczytu_temperatury = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'ODST_ODCZ_TEMP', self.logger))
-        self.czas_odczytu_konfig = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODCZYTU_KONFIG', self.logger))
+        #self.czas_odczytu_konfig = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODCZYTU_KONFIG', self.logger))
         self.logger.info('Odczytalem konfiguracje temperatura.')
 
-    '''def odczytaj_konfiguracje_cyklicznie(self):
-        self.odczytaj_konf()
-        now = datetime.datetime.now()
-        run_at = now + datetime.timedelta(hours=self.czas_odczytu_konfig)
-        delay = (run_at - now).total_seconds()
-        # TODO aktywowac odczytywanie konfiguracji temperatury na nowo?
-        # threading.Timer(delay, self.odczytaj_konf).start()'''
-
-    def resetuj_czujniki_temperatury_cyklicznie(self):
+    def __resetuj_czujniki_temperatury_cyklicznie(self):
         #czas_odlaczania_czujnikow = int(odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODLACZANIA_CZUJNIKOW')) * 60
         # TODO z jakichs powodow nie odczytuje poprawnie powyzszego parametru z konfiguracji
         czas_odlaczania_czujnikow = 38 * 60
-        threading.Timer(czas_odlaczania_czujnikow, self.resetuj_czujniki_temperatury_cyklicznie, []).start()
-        self.resetuj_czujniki_temperatury()
+        threading.Timer(czas_odlaczania_czujnikow, self.__resetuj_czujniki_temperatury_cyklicznie, []).start()
+        #self.__resetuj_czujniki_temperatury()
 
-    def resetuj_czujniki_temperatury(self):
+    def __resetuj_czujniki_temperatury(self):
+        pass
         # odlacza na 5 sekund czujniki temperatury, zasilanie
-        nr_pinu = int(odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'PIN_PI_ODLACZANIE_ZASILANIA_CZUJNIKOW'))
-        przekaz = przekazniki_BCM.PrzekaznikiBCM(self.mcp)
-        nazwa_przek = 'Reset czujn temp'
-        przekaz.dodaj_przekaznik(nazwa_przek, nr_pinu)
-        # TODO przerobic ten time.sleep na threading
-        # TODO chyba wlacz_na_czas nie dziala
-        # przekaz.wlacz_na_czas(0, 3)
-        przekaz.ustaw_przekaznik_nazwa(nazwa_przek, True)
-        time.sleep(2)
-        przekaz.ustaw_przekaznik_nazwa(nazwa_przek, False)
+#        self.wewy.wyjscia.ustaw_przekaznik_nazwa(self.nazwa_przek, True)
+    #    time.sleep(2)
+   #     self.wewy.wyjscia.ustaw_przekaznik_nazwa(self.nazwa_przek, False)
 
-    def zapisz_temp_do_bazy(self):
+
+    def __zapisz_temp_do_bazy(self):
         try:
-            db = MySQLdb.connect(host = "localhost", user = "root", passwd = constants.PWD_BAZY, db = "stacja_pogodowa")
+            db = MySQLdb.connect(host = "localhost", user = "root", passwd = os.getenv(constants.PWD_BAZY), db = "stacja_pogodowa")
             cur = db.cursor()
             cur.execute("""INSERT INTO stacja_pogodowa.temperatura(outside,wilgotnosc_out,inside,wilgotnosc_in,wilgotnosc_gleby) VALUES (%s, %s, %s, %s, %s)""", (self.temp_out, self.wilg_out, self.temp_in, self.wilg_in, self.wilg_gleby))
             db.commit()
@@ -128,10 +124,8 @@ class temperatura:
         except MySQLdb._mysql.OperationalError as serr:
             self.logger.warning('Blad zapisu temperatury do bazy danych: ' + str(serr))
 
-    def odczytaj_temperature(self):
-        # self.wilg, self.temp = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
-        # while 1:
-        #time.sleep(3)
+    def __odczytaj_temperature_z_czujnika(self):
+
         self.temp_out = -99.9
         self.wilg_out = 0
         self.s.trigger()
@@ -140,35 +134,25 @@ class temperatura:
         time.sleep(0.3)
         self.wilg_out = self.s.humidity()
         self.temp_out = self.s.temperature()
+        #self.logger.info('Odczytalem temp z czujnika' + str(self.temp_out))
         if self.temp_out is None:
             self.wilg_out = 0
             self.temp_out = -99.9
 
-    def pobieraj_temperature_cyklicznie(self):
+    def __pobieraj_temperature_cyklicznie(self):
         temp = deepcopy(self.temp_out)
-        #temp = self.temp_out
-        self.odczytaj_temperature()
+        self.__odczytaj_temperature_z_czujnika()
 
-        self.aktualizuj_stan_temperatury()
+        self.aktualizuj_biezacy_stan()
         #TODO tutaj trzeba przeniesc cykliczne resetowanie czujnika temperatury z mysocket do temperatury
         if int(round(temp)) != int(round(self.temp_out)):
-            self.ts = int(time.time())
-	    self.aktualizuj_stan_temperatury()
-            # self.logger.info("Zmiana w temperaturze, informuje klientow za pomoca Firebase. Poprzednio bylo: "
-            #                + str(temp) + " a teraz jest " + str(self.temp_out))
-
-            #notyfikacja_firebase = firebasenotification.Firebasenotification()
-            #notyfikacja_firebase.notify(constants.OBSZAR_TEMP, str(round(self.temp_out)))
-            if self.firebase_callback is not None:
-                #oo = THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY,
-                #                                    self.stan_temperatury, constants.STATUS_OK)
-                self.logger.info('Odpalam firebase z temperatury: ' + str(self.temp_out))
-                self.firebase_callback()
-                #print 'fire z temperatury'
-
-        self.zapisz_temp_do_bazy()
-        threading.Timer(self.odstep_odczytu_temperatury, self.pobieraj_temperature_cyklicznie).start()
-
+            self.resetuj_ts()
+            self.odpal_firebase()
+            #if self.firebase_callback is not None:
+            #    self.firebase_callback(constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY, self.get_biezacy_stan())
+        self.aktualizuj_biezacy_stan()
+        self.__zapisz_temp_do_bazy()
+        #threading.Timer(self.odstep_odczytu_temperatury, self.__pobieraj_temperature_cyklicznie).start()
 
 
 class sensor:

@@ -5,6 +5,7 @@ import json
 from random import randint
 import logging
 import datetime
+from threading import Lock
 import sys
 from random import getrandbits
 import spotify_klasa
@@ -20,14 +21,26 @@ TYP_SPOTIFY = 4
 SUFFIX_ULUBIONYCH_PLIKI = '-files'
 PO_KOLEI = 1
 LOSOWO = 2
-LINK_YOUTUBE = 'YOUTUBEVIDEO'
-LINK_YOUTUBEPLAYLISTA = 'YOUTUBEPLAYLISTA'
-LINK_INNE = 'INNE'
-LINK_SPOTIFY = 'SPOTIFY'
+RODZAJ_LINKU_YOUTUBE = 'YOUTUBEVIDEO'
+RODZAJ_LINKU_YOUTUBEPLAYLISTA = 'YOUTUBEPLAYLISTA'
+RODZAJ_LINKU_INNE = 'INNE'
+RODZAJ_LINKU_SPOTIFY = 'SPOTIFY'
 
 DLUGOSC_HISTORII = 100
 NAZWA_PLIKU_HISTORIA = 'historia'
 NAZWA_PLIKU_AKTUALNA_PLAYLISTA = 'aktualna_playlista'
+
+
+SERWIS_RADIOWY = 'serwis_radiowy'
+STACJA_RADIOWA = 'stacja_radiowa'
+ID_STACJI = 'id_stacji'
+URI_SPOTIFY = 'uri_spotify'
+LINK_YOUTUBE = 'link_youtube'
+TYP = 'typ'
+
+JAK_ODTWARZA = 'Jak_odtwarza'
+LICZBA_POZYCJI = 'Liczba_pozycji'
+NUMER_POZYCJI = 'Numer_pozycji'
 
 
 # NAZWA_PLIKU_Z_AKTUALNA_PLAYLISTA = constants.KATALOG_GLOWNY + '/' + NAZWA_PLIKU_AKTUALNA_PLAYLISTA
@@ -36,7 +49,8 @@ NAZWA_PLIKU_AKTUALNA_PLAYLISTA = 'aktualna_playlista'
 
 class PozycjaPlaylisty:
     def __init__(self, artist='', album='', title='', link='', link_youtube='',
-                 typ=TYP_RADIO, fanart='', czas='', serwis_radiowy='', stacja_radiowa='', uri_spotify=''):
+                 typ=TYP_RADIO, fanart='', czas='', serwis_radiowy='', stacja_radiowa='',
+                 id_stacji_radiowej='', uri_spotify='', ts_konca=0):
         # TODO przerobic nazwy zmiennych na _ i gettery settery, przejrzec caly kod
         self.artist = artist
         self.album = album
@@ -50,54 +64,47 @@ class PozycjaPlaylisty:
         self.czas = czas
         self.serwis_radiowy = serwis_radiowy
         self.stacja_radiowa = stacja_radiowa
+        self.id_stacji_radiowej= id_stacji_radiowej
+        self.ts_stop = ts_konca    #timestamp kiedy piosenka konczy sie w radiach
         return
 
     def pozycja_do_listy(self, pelna=True):
-        pozycja = {'title': self.title,
-                   'typ': self.typ,
-                   'fanart': self.fanart,
+        pozycja = {constants.TITLE: self.title,
+                   TYP: self.typ,
+                   constants.FANART: self.fanart,
                    }
         if self.typ == TYP_YOUTUBE:
-            pozycja['link_youtube'] = self.link_youtube
-            pozycja['artist'] = self.artist
-            pozycja['album'] = self.album
+            pozycja[LINK_YOUTUBE] = self.link_youtube
+            pozycja[constants.ARTIST] = self.artist
+            pozycja[constants.ALBUM] = self.album
             pozycja[constants.CZAS] = self.czas
         elif self.typ == TYP_SPOTIFY:
-            pozycja['uri_spotify'] = self.uri_spotify
-            pozycja['artist'] = self.artist
-            pozycja['album'] = self.album
+            # TODO usunac tu i w android
+            pozycja[URI_SPOTIFY] = self.uri_spotify
+            pozycja[constants.ARTIST] = self.artist
+            pozycja[constants.ALBUM] = self.album
             pozycja[constants.CZAS] = self.czas
         elif self.typ == TYP_RADIO:
-            pozycja['serwis_radiowy'] = self.serwis_radiowy
-            pozycja['stacja_radiowa'] = self.stacja_radiowa
+            pozycja[SERWIS_RADIOWY] = self.serwis_radiowy
+            pozycja[STACJA_RADIOWA] = self.stacja_radiowa
+            pozycja[ID_STACJI] = self.id_stacji_radiowej
         if pelna:
-            pozycja['link'] = self.link
+            pozycja[constants.LINK] = self.link
         return pozycja
 
-    def porownaj_pozycje(self, pozycja):
-        # TODO dorobic porownywanie pozycji, jakie pola ma wziasc pod uwage
-        # zwraca True jesli takie same z biezaca
-        if pozycja.link == self.link:
-            return True
-        return False
-
-
 class Playlista(object):
-    def __init__(self, nazwa='', pozycje=[], jak_odtwarza=PO_KOLEI, przy_starcie=False, plik=''):
+    def __init__(self, nazwa='', jak_odtwarza=PO_KOLEI, przy_starcie=False, plik=''):
         self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
         self.nazwa = nazwa
-        self.pozycje = pozycje
+        self.pozycje = []
         self.jak_odtwarza = jak_odtwarza
         self.nr_pozycji_na_playliscie = 0
-        # katbierzacy = os.path.dirname(os.path.realpath(__file__))
-        #self.katalog_ulubionych = katbierzacy + PODKATALOG_ULUBIONYCH
         self.katalog_ulubionych = constants.KATALOG_ULUBIONYCH
-        #self.nazwa_pliku_z_aktualna_playlista = katbierzacy + '/' + NAZWA_PLIKU_AKTUALNA_PLAYLISTA
-        self.nazwa_pliku_z_aktualna_playlista = constants.KATALOG_GLOWNY + '/' + NAZWA_PLIKU_AKTUALNA_PLAYLISTA
-        #self.nazwa_pliku_z_historia = katbierzacy + '/' + NAZWA_PLIKU_HISTORIA
-        self.nazwa_pliku_z_historia = constants.KATALOG_GLOWNY + '/' + NAZWA_PLIKU_HISTORIA
+        self.nazwa_pliku_z_aktualna_playlista = os.getenv(constants.KATALOG_GLOWNY) + '/' + NAZWA_PLIKU_AKTUALNA_PLAYLISTA
+        self.nazwa_pliku_z_historia = os.getenv(constants.KATALOG_GLOWNY) + '/' + NAZWA_PLIKU_HISTORIA
         self.ts = int(time.time())
         self.ts_historii = int(time.time())
+        self.lock_aktualizacji = Lock()
         if przy_starcie:
             self.inicjalizuj_playliste_z_pliku(self.nazwa_pliku_z_aktualna_playlista)
         else:
@@ -149,13 +156,13 @@ class Playlista(object):
     def dodaj_z_linku(self, link, fanartlink, zmien_nazwe=False):
         rodzaj_linku = self.__sprawdz_rodzaj_linku(link)
         nazwa = ''
-        if rodzaj_linku == LINK_YOUTUBE:
+        if rodzaj_linku == RODZAJ_LINKU_YOUTUBE:
             nazwa = self.dodaj_z_linku_youtube(link)
-        elif rodzaj_linku == LINK_YOUTUBEPLAYLISTA:
+        elif rodzaj_linku == RODZAJ_LINKU_YOUTUBEPLAYLISTA:
             nazwa = self.dodaj_playliste_youtube(link)
-        elif rodzaj_linku == LINK_SPOTIFY:
+        elif rodzaj_linku == RODZAJ_LINKU_SPOTIFY:
             nazwa = self.dodaj_z_linku_spotify(link)
-        elif rodzaj_linku == LINK_INNE:
+        elif rodzaj_linku == RODZAJ_LINKU_INNE:
             nazwa = self.dodaj_pozycje_z_polami(artist='', album='', title=str(os.path.basename(link)),
                                                 link=link, typ=TYP_RADIO, fanart=fanartlink, czas='')
         if zmien_nazwe:
@@ -172,7 +179,7 @@ class Playlista(object):
             id = dodatek
         nazwa_playlisty = ''
         if ("open.spotify.com/artist" in link) or ("spotify:artist:" in link):
-            se = spot.zapytanie('artist', id, dodatek)
+            se = spot.zapytanie(constants.ARTIST, id, dodatek)
             try:
                 for a in se['tracks']:
                     self.__dodaj_do_playlisty_spotify_track(a)
@@ -184,7 +191,7 @@ class Playlista(object):
             self.__dodaj_do_playlisty_spotify_playlist(playlista)
             nazwa_playlisty = playlista['name']
             next = playlista['tracks']['next']
-            if (next is not None):
+            if next is not None:
                 if next != '':
                     kolejne = spot.nastepny(playlista['tracks']['next'])
                     self.__dodaj_do_playlisty_spotify_playlist(kolejne['kolejne'])
@@ -202,7 +209,7 @@ class Playlista(object):
             self.__dodaj_do_playlisty_spotify_track(track)
             nazwa_playlisty = track['artists'][0]['name']
         elif ("open.spotify.com/album" in link) or ("spotify:album" in link):
-            album = spot.zapytanie('album', id, dodatek)
+            album = spot.zapytanie(constants.ALBUM, id, dodatek)
             self.__dodaj_do_playlisty_spotify_album(album)
             nazwa_playlisty = album['artists'][0]['name'] + ' - ' + album['name']
 
@@ -240,7 +247,7 @@ class Playlista(object):
     def __dodaj_do_playlisty_spotify_track(self, track):
         fanart = ''
         try:
-            fanart = track['album']['images'][0]['url']
+            fanart = track[constants.ALBUM]['images'][0]['url']
         except (IndexError, KeyError) as serr:
             self.logger.warning('Brak obrazu dla track: ' + str(track))
         artist = ''
@@ -250,7 +257,7 @@ class Playlista(object):
             self.logger.warning('Brak artysty dla track: ' + str(track))
         album = ''
         try:
-            album = track['album']['name']
+            album = track[constants.ALBUM]['name']
         except (IndexError, KeyError, TypeError) as serr:
             self.logger.warning('Brak albumu dla track: ' + str(track))
         self.dodaj_pozycje_z_polami(artist=artist,
@@ -263,6 +270,7 @@ class Playlista(object):
                                     czas=str(datetime.timedelta(seconds=track['duration_ms'] / 1000)),
                                     uri_spotify=track['uri'])
 
+    # noinspection PyProtectedMember
     def dodaj_z_linku_youtube(self, link):
         try:
             self.logger.info('Rozwijam z linku youtube: ' + link)
@@ -277,13 +285,15 @@ class Playlista(object):
         except (ValueError, IOError, RuntimeError) as serr:
             self.logger.warning('Pafy blad: ' + str(serr) + ' Link: ' + link)
             return ''
+        autorx = video._author
         if dostepny:
-            self.dodaj_pozycje_z_polami(artist=video._author, album='', title=video.title,
+            # noinspection PyProtectedMember
+            self.dodaj_pozycje_z_polami(artist=autorx, album='', title=video.title,
                                         link=bestaudio._url, link_youtube=link, typ=TYP_YOUTUBE, fanart=fanart,
                                         czas=video.duration)
         self.zapisz_playliste()
-        if video._author:
-            return video._author
+        if autorx:
+            return autorx
         else:
             return ''
 
@@ -307,14 +317,14 @@ class Playlista(object):
     def __sprawdz_rodzaj_linku(self, link):
         if "https://youtu.be/" in link or "https://www.youtube.com" in link or "http://www.youtu" in link:
             if "&list=" in link or 'playlist?list=' in link:
-                return LINK_YOUTUBEPLAYLISTA
-            return LINK_YOUTUBE
+                return RODZAJ_LINKU_YOUTUBEPLAYLISTA
+            return RODZAJ_LINKU_YOUTUBE
         if "open.spotify.com/" in link:
-            return LINK_SPOTIFY
+            return RODZAJ_LINKU_SPOTIFY
         if "spotify:" in link:
-            return LINK_SPOTIFY
+            return RODZAJ_LINKU_SPOTIFY
         self.logger.warning("Przyszedl link, ktory nie jest ani playlista ani video: " + str(link))
-        return LINK_INNE
+        return RODZAJ_LINKU_INNE
 
     def inicjalizuj_playliste_z_pliku(self, nazwa_pliku, zeruj=True):
         if nazwa_pliku == '':
@@ -331,7 +341,7 @@ class Playlista(object):
                 nagl = pl['Naglowek']
                 self.zeruj()
                 self.nazwa = nagl[constants.NAZWA]
-                self.jak_odtwarza = int(nagl['Jak_odtwarza'])
+                self.jak_odtwarza = int(nagl[JAK_ODTWARZA])
                 self.nr_pozycji_na_playliscie = nagl['Numer_pozycji']
 
             # TODO czy nie dorobic do JSONa pojedynczej pozycji i potem skladac
@@ -341,39 +351,35 @@ class Playlista(object):
             self.logger.warning('Blad przy dodawaniu do playlisty z pliku: ' + nazwa_pliku + '. Kod bledu: ' + str(ser))
             return
 
-    def dodaj_z_json(self, p):
-        self.pozycje.append(self.pozycja_z_json(p))
-        return
-
     def pozycja_z_json(self, p):
-        artist = album = title = link = fanart = czas = serwisr = stacjar = link_youtube = uri_spotify = ''
+        artist = album = title = link = fanart = czas = serwisr = stacjar = link_youtube = uri_spotify = id_stacji = ''
         typ = TYP_YOUTUBE
         try:
-            artist = p['artist']
+            artist = p[constants.ARTIST]
         except KeyError:
             pass
         try:
-            album = p['album']
+            album = p[constants.ALBUM]
         except KeyError:
             pass
         try:
-            title = p['title']
+            title = p[constants.TITLE]
         except KeyError:
             pass
         try:
-            link = p['link']
+            link = p[constants.LINK]
         except KeyError:
             pass
         try:
-            link_youtube = p['link_youtube']
+            link_youtube = p[LINK_YOUTUBE]
         except KeyError as serr:
             pass
         try:
-            typ = int(p['typ'])
+            typ = int(p[TYP])
         except KeyError:
             pass
         try:
-            fanart = p['fanart']
+            fanart = p[constants.FANART]
         except KeyError:
             pass
         try:
@@ -381,29 +387,36 @@ class Playlista(object):
         except KeyError:
             pass
         try:
-            serwisr = p['serwis_radiowy']
+            serwisr = p[SERWIS_RADIOWY]
         except KeyError:
             pass
         try:
-            stacjar = p['stacja_radiowa']
+            stacjar = p[STACJA_RADIOWA]
         except KeyError:
             # self.logger.warning('Brak klucza w playliscie: ' + str(serr))
             pass
         try:
-            uri_spotify = p['uri_spotify']
+            id_stacji = p[ID_STACJI]
+        except KeyError:
+            pass
+        try:
+            uri_spotify = p[URI_SPOTIFY]
         except KeyError:
             pass
 
         return PozycjaPlaylisty(artist=artist, album=album, title=title,
                                 link=link, link_youtube=link_youtube, typ=typ, fanart=fanart,
-                                czas=czas, serwis_radiowy=serwisr, stacja_radiowa=stacjar, uri_spotify=uri_spotify)
+                                czas=czas, serwis_radiowy=serwisr, stacja_radiowa=stacjar,
+                                id_stacji_radiowej=id_stacji, uri_spotify=uri_spotify)
 
     def dodaj_pozycje_z_polami(self, artist='', album='', title='', link='', link_youtube='',
-                               typ=TYP_RADIO, fanart='', czas='', serwis_radiowy='', stacja_radiowa='', uri_spotify=''):
+                               typ=TYP_RADIO, fanart='', czas='', serwis_radiowy='', stacja_radiowa='',
+                               id_stacji_radiowej='', uri_spotify='', ts_konca=0):
         self.pozycje.append(PozycjaPlaylisty(artist=artist, album=album, title=title,
                                              link=link, link_youtube=link_youtube, typ=typ, fanart=fanart, czas=czas,
                                              serwis_radiowy=serwis_radiowy, stacja_radiowa=stacja_radiowa,
-                                             uri_spotify=uri_spotify))
+                                             id_stacji_radiowej=id_stacji_radiowej, uri_spotify=uri_spotify,
+                                             ts_konca=ts_konca))
         return artist
 
     def zapisz_playliste_w_ulubionych(self, nazwa_ulubionego):
@@ -491,8 +504,8 @@ class Playlista(object):
         dane = {}
         # TODO przeniesc do contants ponize hardcody
         dane['Naglowek'] = {constants.NAZWA: self.nazwa,
-                            'Jak_odtwarza': str(self.jak_odtwarza),
-                            'Liczba_pozycji': int(self.liczba_pozycji()),
+                            JAK_ODTWARZA: str(self.jak_odtwarza),
+                            LICZBA_POZYCJI: int(self.liczba_pozycji()),
                             'Numer_pozycji': int(self.nr_pozycji_na_playliscie),
                             constants.TS: self.ts}
         pozy = []
