@@ -9,7 +9,6 @@ import logging
 import liriki
 import playlista
 import radia
-import denon
 import ulubione
 import spotify_odtwarzacz
 import spotify_klasa
@@ -20,7 +19,7 @@ ADRES_KODI = 'http://127.0.0.1:8088/jsonrpc'
 CZAS_ODSWIEZANIA_STANU_ODTWARZACZA = 1
 LICZBA_ODSWIEZEN_DO_STATUSU = 8
 CZAS_PRZERWY_MIEDZY_PROBAMI_ODTWARZANIA = 10  # w sekundach
-CZAS_WYLACZENIA_PO_NIEAKTYWNOSCI = 10800
+CZAS_WYLACZENIA_PO_NIEAKTYWNOSCI = 10800 #3 godziny, podane w sekundach
 
 
 # NAZWA_PLIKU_DZWONKA = constants.KATALOG_GLOWNY + '/doorbell.mp3'
@@ -42,9 +41,7 @@ class BiezacyStan:
         self.ts = 0
         self.czy_gra_denon = False
         self.czy_aktualnie_gra = False
-        # TODO self.aktualnapozycja powinno byc klasy pozycja playlisty a nie tuple
         self.aktualna_pozycja = playlista.PozycjaPlaylisty() # type: playlista.PozycjaPlaylisty
-        #self.aktualna_pozycja = {}
         self.percentage = 0
         self.ktorykolwiek_wlaczony = False
         self.wzmacniacze = {}
@@ -77,11 +74,11 @@ class BiezacyStan:
                                                 self.wzmacniacze)
 
 class Naglosnienie:
-    def __init__(self, wewy):
+    def __init__(self):
         self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
         self.logger.info("Zaczynam inicjalizowac Naglosnienie.")
 
-        self.wzmacniacze = wzmacniacze.Wzmacniacze(wewy, self.logger)
+        self.wzmacniacze = wzmacniacze.Wzmacniacze(self.logger)
         self.odczytaj_konf()
 
         # self.glosnosc_przy_dzwonku = GLOSNOSC_PRZY_DZWONKU
@@ -98,7 +95,6 @@ class Naglosnienie:
         self.katalog_radii.pobierz_radia_cyklicznie()
         self.biezacy_stan = BiezacyStan()
         self.licznik_delay_odswiezania = 0
-        self.den = denon.Denon(self.logger)
         self._czas_maksymalnego_braku_aktywnosci = CZAS_WYLACZENIA_PO_NIEAKTYWNOSCI
 
         self.spoti = spotify_odtwarzacz.SpotifyOdtwarzacz(self.logger)
@@ -106,7 +102,6 @@ class Naglosnienie:
         self.odtwarzacz = self.kodi
 
         self.pauza = True
-        self.odtwarzaj_denon = False
         self.czas_ostatniej_aktywnosci = datetime.datetime.now()
 
         #self.notyfikacja_firebase = firebasenotification.Firebasenotification()
@@ -143,7 +138,7 @@ class Naglosnienie:
         elif komenda == 'UL_AR':
             return self.ulub.arduino_wyslij_ulubione()
         elif komenda == 'GL_AR':
-            if self.wzmacniacze.przek.stan_przekaznika_nazwa(parametr2):
+            if self.wzmacniacze.stan_wzmacniacza_po_nazwie(parametr2):
                 self.kasuj_czas_ostatniej_aktywnosci()
                 self.wzmacniacze.set_glosnosc_delta_nazwa(parametr2, int(parametr1))
                 self.przekaz_stan_wzmacniaczy_do_garazu()
@@ -157,7 +152,6 @@ class Naglosnienie:
             self.toggle_wzmacniacz_nazwa(parametr2)
             return self.zwroc_status_arduino(parametr2)
         elif komenda == 'GLOSN':
-            #glosno = 0
             try:
                 glosno = int(parametr1)
                 self.kasuj_czas_ostatniej_aktywnosci()
@@ -176,29 +170,6 @@ class Naglosnienie:
             if not self.ic_trwa:
                 threading.Thread(target=self.odtworz_z_pliku, args=(self.plik_dzwonka,)).start()
                 #thread.start_new_thread(self.odtworz_z_pliku, (self.plik_dzwonka,))
-        elif komenda == 'DE':
-            # obsluga Denona
-            if parametr1 == 'GLOSN':
-                self.den.heos_set_volume(parametr2)
-            elif parametr1 == 'ST':
-                self.den.heos_set_play_state(parametr2)
-                if parametr2 == 'play':
-                    self.den.heos_play_url(self.aktualna_playlista.aktualnie_grane_link())
-            elif parametr1 == 'PL':
-                self.den.heos_play_url(parametr2)
-            elif parametr1 == 'OD':
-                if parametr2 == constants.PARAMETR_JEDEN:
-                    self.odtwarzaj_denon = True
-                    # naglo.wylacz_wszystkie_wzmacniacze()
-                    # naglo.odtwarzaj_z_playlisty(naglo.aktualna_playlista.nr_pozycji_na_playliscie)
-                    # if stan:
-                    #        self.den.heos_set_play_state('play')
-                else:
-                    self.odtwarzaj_denon = False
-                    # naglo.den.heos_set_play_state('stop')
-        # elif komenda == 'WE':
-        #    naglo.wybor_wejscia(int(parametr1), int(parametr2))
-        #    logger.warning('Zmiana wejscia, nr wzm: ' + str(parametr1) + ', nr wejscia: ' + str(parametr2))
         elif komenda == constants.RODZAJ_KOMUNIKATU_LIRYKI:
             #self.liryki.odczytaj_liryki(self.aktualna_playlista.aktualna_pozycja().artist,
             #                            self.aktualna_playlista.aktualna_pozycja().title)
@@ -302,12 +273,11 @@ class Naglosnienie:
                 nr_pozycji = int(parametr2)
                 if self.aktualna_playlista.usun_pozycje_z_playlisty(nr_pozycji):
                     self.odtwarzaj_z_playlisty()
-        elif komenda == 'WZ':
-            # TODO ta komenda musi byc zmieniona na WZ_TOGGLE
-            if parametr2 == constants.PARAMETR_JEDEN:
-                self.wlacz_wylacz_wzmacniacz_nazwa(parametr1, True)
-            else:
-                self.wlacz_wylacz_wzmacniacz_nazwa(parametr1, False)
+#        elif komenda == 'WZ':
+#            if parametr2 == constants.PARAMETR_JEDEN:
+#                self.wlacz_wylacz_wzmacniacz_nazwa(parametr1, True)
+#            else:
+#                self.wlacz_wylacz_wzmacniacz_nazwa(parametr1, False)
         elif komenda == 'WZ_TOGGLE':
             self.toggle_wzmacniacz_nazwa(parametr1)
 
@@ -327,23 +297,12 @@ class Naglosnienie:
             pozy = self.aktualna_playlista.pozycja_z_json(poz[constants.POZYCJA])
             if dodaj:
                 self.logger.info("Dodaje do playlisty z historii: " + str(poz[constants.POZYCJA]))
-
-                #self.aktualna_playlista.dodaj_pozycje_z_polami(
-                #    playlista.PozycjaPlaylisty())
-                #def dodaj_pozycje_z_polami(self, artist='', album='', title='', link='', link_youtube='',
-                #                           typ=TYP_RADIO, fanart='', czas='', serwis_radiowy='', stacja_radiowa='',
-                #                           id_stacji_radiowej='', uri_spotify='', ts_konca=0):
-
-                #self.aktualna_playlista.pozycje.append(poz[constants.POZYCJA])
                 self.aktualna_playlista.pozycje.append(pozy)
-                #self.aktualna_playlista.dodaj_z_json(poz[constants.POZYCJA])
                 self.aktualna_playlista.zapisz_playliste()
             else:
                 self.logger.info("Odtwarzam z historii: " + str(poz[constants.POZYCJA]))
                 self.aktualna_playlista.zeruj()
                 self.aktualna_playlista.pozycje.append(pozy)
-                #self.aktualna_playlista.pozycje.append(poz[constants.POZYCJA])
-                #self.aktualna_playlista.dodaj_z_json(poz[constants.POZYCJA])
                 self.aktualna_playlista.zapisz_playliste()
                 self.odtwarzaj_z_playlisty(zapisuj_historie=False)
         else:
@@ -353,51 +312,77 @@ class Naglosnienie:
         self.ic_trwa = True
         # zapamietanie glosnosci i aktualnej pozycji
         self.logger.info('Odtwarzam z pliku: ' + str(plik))
-        glosnosci = []
-        for j in self.wzmacniacze.wzmacniacze:
-            glosnosci.append(j.glosnosc)
+        k_stan = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_KUCHNIA).stan
+        k_gl = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_KUCHNIA).glosnosc
+        l_stan = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_LAZIENKA).stan
+        l_gl = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_LAZIENKA).glosnosc
+        t_stan = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_TARAS).stan
+        t_gl = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_TARAS).glosnosc
+#        glosnosci = {}
+#        for j in self.wzmacniacze.wzmacniacze:
+#            glosnosci.append(j)
+        #for j in self.wzmacniacze.wzmacniacze:
+        #    glosnosci.append(j.glosnosc)
 
         percent = int(self.odtwarzacz.percentage)
 
         # IC_czy_gralo - jesli True to znaczy, ze poprzednio gralo i mamy wznowic
-        # self.IC_czy_gralo = self.odtwarzacz.aktualnie_gra
-        self.IC_czy_gralo = self.wzmacniacze.przek.czy_ktorykolwiek_wlaczony(constants.OBSZAR_NAGL)
-
+        self.IC_czy_gralo = self.wzmacniacze.czy_ktorykolwiek_wlaczony()
+        self.logger.warning('IC-zlecam stop')
         self.stop()
-        #self.podmien_odtwarzacz() # force_kodi=True)
+        #self.pauza()
+        licznik = 0
+        while self.odtwarzacz.aktualnie_gra:
+            self.logger.warning('IC-jeszcze gra czekam w loopie, do skutku')
+            self.odtwarzacz.aktualizuj_stan()
+            time.sleep(0.5)
+            licznik = licznik + 1
+            if licznik > 100:
+                self.logger.warning('IC-licznik przy STOP sie przekrecil')
+                break
+        #while odtwarzacz gra to czekamy i liczymy do stu albo wiecej, bez timesleep
+        self.logger.warning('IC-podmieniam odtwarzacz na KODI')
         self.odtwarzacz = self.kodi
-        time.sleep(0.1)
+
 
         # ustawienie wlaczenia wszystkich wzmacniaczy i ich glosnosci
         for j in self.wzmacniacze.wzmacniacze:
             j.ustaw_glosnosc(self.glosnosc_przy_dzwonku)
-        przek_tymcz = self.wzmacniacze.przek.wlacz_wszystkie_przekazniki(przekazniki=None, wlacz=True)
+        self.wzmacniacze.wlacz_wylacz_wszystkie(True)
 
         # odtwarzanie za pomoca kodi, zakladamy, ze kodi jest juz ustawione jako odtwarzacz
         self.odtwarzacz.odtwarzaj_z_linku(plik)
         self.odtwarzacz.aktualnie_gra = True
-        time.sleep(1)
-
+        licznik = 0
+        self.logger.warning('IC-rozpoczynam loop czekania az skonczy odtwarzac')
         while self.odtwarzacz.aktualnie_gra:
-            time.sleep(0.4)
+            licznik = licznik + 1
+            if licznik > 100:
+                self.logger.warning('IC-licznik przy odtwarzaniu sie przekrecil')
+                break
+            time.sleep(2)
             self.odtwarzacz.aktualizuj_stan()
-            #self.aktualizuj_status_odtwarzacza() # force_kodi=True)
+        self.logger.warning('IC-zakonczylem loop czekania na odwtorzenie dzownka')
 
         # usuniecie pliku z interkomem
         if usuwac_plik:
             os.remove(plik)
 
         # odtworzenie stanu przekaznikow i glosnosci
-        self.wzmacniacze.przek.wlacz_wszystkie_przekazniki(przekazniki=przek_tymcz, wlacz=False)
+        '''self.wzmacniacze.wlacz_wylacz_wszystkie(False)
         a = 0
         for j in self.wzmacniacze.wzmacniacze:
             j.ustaw_glosnosc(glosnosci[a])
-            a = a + 1
-
-        # odtworzenie tego co bylo odtwarzane przed IC
-        self.podmien_odtwarzacz()
+            a = a + 1'''
+        self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_KUCHNIA).wlacz_wylacz(k_stan)
+        self.wzmacniacze.set_glosnosc_nazwa(wzmacniacze.NAZWA_WZMACNIACZA_KUCHNIA, k_gl)
+        self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_TARAS).wlacz_wylacz(t_stan)
+        self.wzmacniacze.set_glosnosc_nazwa(wzmacniacze.NAZWA_WZMACNIACZA_TARAS, t_gl)
+        self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_LAZIENKA).wlacz_wylacz(l_stan)
+        self.wzmacniacze.set_glosnosc_nazwa(wzmacniacze.NAZWA_WZMACNIACZA_LAZIENKA, l_gl)
 
         if self.IC_czy_gralo:
+            self.logger.warning('IC-gralo poprzednio, odtwarzam z playlisty')
             self.odtwarzaj_z_playlisty()
             if self.aktualna_playlista.aktualna_pozycja().typ != playlista.TYP_RADIO:
                 licznik = 0
@@ -412,7 +397,7 @@ class Naglosnienie:
         self.ic_trwa = False
 
     def zwroc_status_arduino(self, nazwa):
-        if self.wzmacniacze.przek.stan_przekaznika_nazwa(nazwa):
+        if self.wzmacniacze.stan_wzmacniacza_po_nazwie(nazwa):
             a = '1'
         else:
             a = '0'
@@ -420,12 +405,13 @@ class Naglosnienie:
                'G' + str("{0:0=3d}".format(self.wzmacniacze.wzmacniacz_po_nazwie(nazwa).glosnosc))
 
     def aktualizuj_cyklicznie_stan_odtwarzacza(self):
+        #TODO ten licznik_delay nie jest potrzebny
         if self.licznik_delay_odswiezania == LICZBA_ODSWIEZEN_DO_STATUSU:
             self.licznik_delay_odswiezania = 0
         else:
             self.licznik_delay_odswiezania += 1
 
-        if self.wzmacniacze.przek.czy_ktorykolwiek_wlaczony(constants.OBSZAR_NAGL):
+        if self.wzmacniacze.czy_ktorykolwiek_wlaczony():
             self.licznik_delay_odswiezania = 0
 
         if self.licznik_delay_odswiezania == 0:
@@ -434,21 +420,15 @@ class Naglosnienie:
         # odtwarzanie kolejnego utworu
         if not self.ic_trwa:
             # TODO pauza powinna byc jednoznaczna z ktorykolwiek wlaczony=false
-            if self.wzmacniacze.przek.czy_ktorykolwiek_wlaczony(constants.OBSZAR_NAGL) and self.pauza is False:
+            if self.wzmacniacze.czy_ktorykolwiek_wlaczony() and self.pauza is False:
                 if not self.odtwarzacz.aktualnie_gra:
                     # delta ma sluzyc temu aby co 0,5 sekundy nie probowac kazac kodi odtwarzac tego samego
                     delta = datetime.datetime.now() - self.czas_ostatniego_polecenia_odtwarzania
                     if delta.total_seconds() > CZAS_PRZERWY_MIEDZY_PROBAMI_ODTWARZANIA:
                         self.aktualna_playlista.oblicz_kolejny_do_grania()
                         threading.Thread(target=self.odtwarzaj_z_playlisty).start()
-                        #thread.start_new_thread(self.odtwarzaj_z_playlisty, ())
-                        #self.odtwarzaj_z_playlisty(self.aktualna_playlista.nr_pozycji_na_playliscie)
-                for j in self.wzmacniacze.wzmacniacze:
-                    j.ustaw_glosnosc(j.glosnosc)
-            # else:
-            #    if self.odtwarzacz.aktualnie_gra:
-            #        self.play_pause()
-                    # self.aktualna_playlista.startuj_od_biezacego = True
+                #for j in self.wzmacniacze.wzmacniacze:
+                #    j.ustaw_glosnosc(j.glosnosc)
 
         self.automatyczne_wylaczanie_przy_braku_aktywnosci()
         threading.Timer(CZAS_ODSWIEZANIA_STANU_ODTWARZACZA, self.aktualizuj_cyklicznie_stan_odtwarzacza).start()
@@ -470,19 +450,14 @@ class Naglosnienie:
                                              self.wzmacniacze.do_listy(), constants.PARAMETR_JEDEN)
 
     def aktualizuj_status_odtwarzacza(self):  #, force_kodi=False):
+        if self.ic_trwa:
+            self.logger.warning('Nie aktualizuje stanu odtwarzacza bo trwa IC')
+            return
         przekaz_stan_do_gar = False
         fire = False
         self.lock_aktualizacji_statusu.acquire()
         poprzedni_stan = deepcopy(self.biezacy_stan)
-        """if self.ic_trwa:
-            self.podmien_odtwarzacz(force_kodi=True)
-        else:
-            self.podmien_odtwarzacz(force_kodi=force_kodi)"""
         self.odtwarzacz.aktualizuj_stan()
-        # self.den.aktualizuj_stan()
-        # if self.odtwarzaj_denon:
-        #    self.aktualnie_gra = self.den.current_ispwon
-        # else:
 
         self.biezacy_stan.wzmacniacze = self.wzmacniacze.do_listy()
         self.biezacy_stan.interkom = self.ic_trwa
@@ -504,7 +479,7 @@ class Naglosnienie:
             if poz.typ == playlista.TYP_RADIO:
                 if poz.serwis_radiowy == radia.NAZWA_SERWISU_OPENFM:
                     if poz.ts_stop < int(time.time()):
-                        if self.wzmacniacze.przek.czy_ktorykolwiek_wlaczony(constants.OBSZAR_NAGL):
+                        if self.wzmacniacze.czy_ktorykolwiek_wlaczony():
                             artysta, album, tytul_utworu, ts_konca = self.katalog_radii.odswiez_co_grane_openfm(poz.id_stacji_radiowej)
                             poz.album = album
                             poz.artist = artysta
@@ -522,11 +497,12 @@ class Naglosnienie:
             self.biezacy_stan.aktualna_pozycja = poz
             self.biezacy_stan.nazwa_playlisty = self.aktualna_playlista.nazwa
 
-        self.biezacy_stan.czy_gra_denon = self.odtwarzaj_denon
+        #TODO ta zmienna do usuniecia w API i androdi
+        self.biezacy_stan.czy_gra_denon = False
         self.biezacy_stan.totaltime = self.odtwarzacz.totaltime
         self.biezacy_stan.currenttime = self.odtwarzacz.currenttime
         self.biezacy_stan.percentage = self.odtwarzacz.percentage
-        a = self.wzmacniacze.przek.czy_ktorykolwiek_wlaczony(constants.OBSZAR_NAGL)
+        a = self.wzmacniacze.czy_ktorykolwiek_wlaczony()
 
         if self.biezacy_stan.czy_aktualnie_gra != poprzedni_stan.czy_aktualnie_gra:
             fire = True
@@ -666,6 +642,7 @@ class Naglosnienie:
 
     def odtwarzaj_z_playlisty(self, nr_poz=None, zapisuj_historie=True):
         if self.aktualna_playlista.liczba_pozycji() == 0:
+            self.logger.warning('odtwarzaj z plalisty: pusta playlista')
             return
 
         if nr_poz:
@@ -677,36 +654,27 @@ class Naglosnienie:
                     self.aktualna_playlista.pozycje[self.aktualna_playlista.nr_pozycji_na_playliscie])
             except IndexError:
                 pass
-        # if self.odtwarzaj_denon:
-        #    self.den.heos_play_url(link)
-        # else:
         self.czas_ostatniego_polecenia_odtwarzania = datetime.datetime.now()
-        #self.aktualna_playlista.nr_pozycji_na_playliscie = nr_pozycji
-        self.odtwarzacz.stop()
+        #TODO ten stop chyba nie jest potrzebny i jest powolny w dodatku
+        #self.odtwarzacz.stop()
         self.podmien_odtwarzacz()
-        #thread.start_new_thread(self.odtwarzacz.odtwarzaj_z_linku,
-        #                        (self.aktualna_playlista.aktualnie_grane_link(),))
         self.odtwarzacz.odtwarzaj_z_linku(self.aktualna_playlista.aktualnie_grane_link())
         self.aktualna_playlista.zapisz_playliste()
         if isinstance(self.odtwarzacz, spotify_odtwarzacz.SpotifyOdtwarzacz):
             artysta = self.aktualna_playlista.aktualna_pozycja().artist
             piosenka = self.aktualna_playlista.aktualna_pozycja().title
             threading.Thread(target=self.liryki.odczytaj_liryki, args=(artysta, piosenka)).start()
-            #thread.start_new_thread(self.liryki.odczytaj_liryki, (artysta, piosenka))
-            #self.liryki.odczytaj_liryki(artysta, piosenka)
 
-    def podmien_odtwarzacz(self): #, force_kodi=False):
-        """if force_kodi:
-            self.kodi.aktualizuj_stan()
-            self.odtwarzacz = self.kodi
-            return"""
+    def podmien_odtwarzacz(self):
         if self.aktualna_playlista.aktualna_pozycja() is not None:
             if self.aktualna_playlista.aktualna_pozycja().typ == playlista.TYP_SPOTIFY:
                 self.spoti.aktualizuj_stan()
                 self.odtwarzacz = self.spoti
+                self.logger.warning('podmienilem odtwarzacz na spotify')
             else:
                 self.kodi.aktualizuj_stan()
                 self.odtwarzacz = self.kodi
+                self.logger.warning('podmienilem odtwarzacz na kodi')
 
     def nastepny(self):
         self.kasuj_czas_ostatniej_aktywnosci()
@@ -742,7 +710,7 @@ class Naglosnienie:
         threading.Timer(delay, self.odczytaj_konf).start()
 
     def toggle_wzmacniacz_nazwa(self, nazwa):
-        if self.wzmacniacze.przek.stan_przekaznika_nazwa(nazwa):
+        if self.wzmacniacze.stan_wzmacniacza_po_nazwie(nazwa):
             self.wlacz_wylacz_wzmacniacz_nazwa(nazwa, False)
         else:
             self.wlacz_wylacz_wzmacniacz_nazwa(nazwa, True)
@@ -755,13 +723,12 @@ class Naglosnienie:
             self.logger.info('Wlaczylem wzmacniacz : ' + str(nazwa))
         else:
             self.logger.info('Wylaczylem wzmacniacz : ' + str(nazwa))
-        self.wzmacniacze.przek.ustaw_przekaznik_nazwa(nazwa, stan)
+        self.wzmacniacze.wzmacniacz_po_nazwie(nazwa).wlacz_wylacz(stan)
         self.wzmacniacze.ts = int(time.time())
         self.przekaz_stan_wzmacniaczy_do_garazu()
 
         # pauza jesli wszystko beda wylaczone
-        if not self.wzmacniacze.przek.czy_ktorykolwiek_wlaczony(constants.OBSZAR_NAGL):
-            # if not self.pauza:
+        if not self.wzmacniacze.czy_ktorykolwiek_wlaczony():
             self.play_pause()
             return
 
@@ -769,18 +736,14 @@ class Naglosnienie:
             self.play_pause()
 
     def wylacz_wszystkie_wzmacniacze(self):
-        self.wlacz_wylacz_wzmacniacz_nazwa('Kuchnia', False)
-        self.wlacz_wylacz_wzmacniacz_nazwa('Taras', False)
-        self.wlacz_wylacz_wzmacniacz_nazwa('Lazienka', False)
-        self.wlacz_wylacz_wzmacniacz_nazwa('Balkon', False)
-        self.wlacz_wylacz_wzmacniacz_nazwa('Sypialnia', False)
+        for w in self.wzmacniacze.wzmacniacze:
+            self.wlacz_wylacz_wzmacniacz_nazwa(w.nazwa, False)
         self.wzmacniacze.ts = int(time.time())
-        # TODO dorobic Denona do listy ?
 
     def automatyczne_wylaczanie_przy_braku_aktywnosci(self):
         roznica = datetime.datetime.now() - self.czas_ostatniej_aktywnosci
         if roznica.total_seconds() > self._czas_maksymalnego_braku_aktywnosci:
-            if self.wzmacniacze.przek.czy_ktorykolwiek_wlaczony(constants.OBSZAR_NAGL):
+            if self.wzmacniacze.czy_ktorykolwiek_wlaczony():
                 self.wylacz_wszystkie_wzmacniacze()
                 # self.play_pause()
                 self.logger.info('Wylaczam wzmacn przy braku aktywnosci. Czas ostatn aktywn: ' +
