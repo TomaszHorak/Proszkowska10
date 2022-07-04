@@ -5,6 +5,7 @@ import THutils
 import requests
 import json
 import odtwarzacz
+from constants import OBSZAR_NAGL
 
 CZAS_INICJALIZOWANIA_KODI = 300
 
@@ -50,7 +51,7 @@ class Kodi(odtwarzacz.Odtwarzacz):
                                        player_properties['time']['seconds'])
                 proc = int(player_properties['percentage'])
             except TypeError as serr:
-                self.logger.warning('Blad odczytu player_properties KODI: ' + str(serr))
+                self.logger.warning(OBSZAR_NAGL, 'Blad odczytu player_properties KODI: ' + str(serr))
             if proc > 100:
                 proc = 100
             self.percentage = proc
@@ -63,7 +64,7 @@ class Kodi(odtwarzacz.Odtwarzacz):
     def odtwarzaj_z_linku(self, link):
         odtwarzacz.Odtwarzacz.odtwarzaj_z_linku(self, link)
         if link == '':
-            self.logger.warning('Blad z funkcji odtwarzaj_z_linku: link pusty')
+            self.logger.warning(OBSZAR_NAGL, 'Blad z funkcji odtwarzaj_z_linku: link pusty')
             return
         par = {"item": {"file": link}}
         self.__ask_kodi("Player.Open", par)
@@ -106,23 +107,24 @@ class Kodi(odtwarzacz.Odtwarzacz):
         odp = ''
         try:
             odp = requests.post(self.adres_kodi + '?request=', data=json.dumps(zapytanie)).text
-        except (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout ) as serr:
-            self.logger.warning('Blad wysylania post do KODI, zapyt:' + str(method) + str(params) + ')' + str(serr))
+        except Exception as serr:
+            self.logger.warning(OBSZAR_NAGL, 'Blad wysylania post do KODI, zapyt:' + str(method) + str(params) + ')' + str(serr))
+            return None
         try:
             nag = json.loads(str(odp))
             if nag['id'] != method:
-                self.logger.warning('Odpowiedz KODI na nie to pytanie (zapyt:' + str(method)
+                self.logger.warning(OBSZAR_NAGL, 'Odpowiedz KODI na nie to pytanie (zapyt:' + str(method)
                                     + str(params) + '). Odpowiedz: ' + str(nag['id']))
                 return None
         except ValueError:
-            self.logger.warning('Bledna odp KODI konw JSON(zapyt:'+ str(method) + str(params) + ')' + str(serr))
+            self.logger.warning(OBSZAR_NAGL, 'Bledna odp KODI konw JSON(zapyt:'+ str(method) + str(params) + ')' + str(serr))
             return None
         wynik = ''
         try:
             wynik = nag['result']
         except KeyError as serr:
-            self.logger.warning('Bledna odpowiedz KODI (zapyt:'+ str(method) + str(params) + ')' + str(serr))
-            self.logger.warning('Wynik bledu:' + str(nag))
+            self.logger.warning(OBSZAR_NAGL, 'Bledna odpowiedz KODI (zapyt:'+ str(method) + str(params) + ')' + str(serr))
+            self.logger.warning(OBSZAR_NAGL, 'Wynik bledu:' + str(nag))
         return wynik
 
     def __get_aktywny_player_kodi(self):

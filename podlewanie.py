@@ -4,6 +4,7 @@ import petlaczasowa
 import pigpio
 import constants
 from Obszar import Obszar
+from MojLogger import MojLogger
 
 NAZWA_SEKCJA1 = 'Sekcja1'
 NAZWA_SEKCJA2 = 'Sekcja2'
@@ -24,16 +25,36 @@ PIN_SEKCJA7 = 6
 DEF_CZAS_ZALACZENIA_SEKCJI = 3600
 
 
+''' Dokumentacja API
+
+every command structure:
+'komenda' - command -> constants.KOMENDA 
+'parametry' - additional parameters
+
+BLOKADA_PODLEWANIA: 'WP'
+blokuje mozliwosc wlaczania sie podlewania
+constants.STAN = true oznacza, ze podlewanie jest aktywne
+
+'''
+
+
 class Podlewanie(Obszar):
     def __init__(self,
                  wewy,  # type: wejsciawyjscia.WejsciaWyjscia
                  petla,  # type: petlaczasowa.PetlaCzasowa
+                 logger,    #type: MojLogger
                  firebase_callback=None):
 
-        Obszar.__init__(self, wewy, petla, constants.OBSZAR_PODL, firebase_callback=firebase_callback,
-                        rodzaj_komunikatu_firebase=constants.RODZAJ_KOMUNIKATU_STAN_PODLEWANIA,
-                        callback_przekaznika_wyjscia=self.aktualizuj_biezacy_stan,
+        Obszar.__init__(self, constants.OBSZAR_PODL,
+                        logger,
+                        petla=petla,
+                        wewy=wewy,
+                        firebase_callback=firebase_callback,
+                        rodzaj_komunikatu=constants.RODZAJ_KOMUNIKATU_STAN_PODLEWANIA,
+                        callback_przekaznika_wyjscia=self.resetuj_ts,
                         dzialanie_petli=self.dzialanie_petli)
+
+
 
         self.gpio_pigpio = pigpio.pi()
         # TODO pigpio usunac, powinno byc w wewy
@@ -52,68 +73,63 @@ class Podlewanie(Obszar):
         self.plywak_studnia = 0
         self.plywak_szambo = 0
 
-        a = THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_PODL, 'podlewanie_aktywne', self.logger)
+        a = THutils.odczytaj_parametr_konfiguracji(self.obszar, 'podlewanie_aktywne', self.logger)
         if a in ['True', 'true', 'TRUE']:
             self.podlewanie_aktywne = True
         else:
             self.podlewanie_aktywne = False
 
-        self.odczytaj_konf()
+        self.max_wilg = int(THutils.odczytaj_parametr_konfiguracji(self.obszar, 'MAX_WILG', self.logger))
+        self.plywak_studnia_pin = int(
+            THutils.odczytaj_parametr_konfiguracji(self.obszar, 'PLYWAK_STUDNIA_PIN', self.logger))
+        self.plywak_szambo_pin = int(
+            THutils.odczytaj_parametr_konfiguracji(self.obszar, 'PLYWAK_SZAMBO_PIN', self.logger))
 
         self.wewy.wyjscia.wylacz_wszystkie_przekazniki(constants.OBSZAR_PODL)
         self.aktualizuj_biezacy_stan()
-        self.logger.info('Zainicjowalem klase podlewanie.')
+        self.logger.info(self.obszar, 'Zainicjowalem klase podlewanie.')
 
-    def procesuj_polecenie(self, komenda, parametr1, parametr2):
-        # TODO pozmieniac nazwy operacji aby byly spojne pomiedzy podlewaniem a oswietleniem i ogrzewaniem
-        if komenda == 'WP':
-            if parametr1 == constants.PARAMETR_WLACZ:
-                self.aktywuj_podlewania(True)
-            else:
-                self.aktywuj_podlewania(False)
-            self.resetuj_ts()
-        #elif komenda == constants.KOMENDA_ODCZYTAJ_CYKLE_Z_KONFIGURACJI:
-        #    self.petla.odczytaj_cykle_z_konfiguracji()
-        self.aktualizuj_biezacy_stan()
-        return Obszar.procesuj_polecenie(self, komenda, parametr1, parametr2)
+    def procesuj_polecenie(self, **params):
+        rodzaj = Obszar.procesuj_polecenie(self, **params)
+        if rodzaj == constants.KOMENDA:
+            # TODO pozmieniac nazwy operacji aby byly spojne pomiedzy podlewaniem a oswietleniem i ogrzewaniem
+            if params[constants.KOMENDA] == 'WP':
+                if constants.POLE_STAN in params:
+                    self.aktywuj_podlewania(params[constants.POLE_STAN])
+        return Obszar.odpowiedz(self)
 
     def aktywuj_podlewania(self, stan):
-        # TODO ponizzssa logika nie dziala, zrobic tak aby tylko kiedy jest deaktywowane to wylaczalor
-        self.petla.aktywuj_wszystkie_pozycja_w_obszarze(self.obszar, stan)
         if not stan:
-            self.petla.dzialaj_na_wszystkich_pozycjach(self.obszar, stan)
-        self.logger.info('Uaktywniono podlewanie: ' + str(stan))
+            self.petla.dzialaj_na_wszystkich_pozycjach(self.obszar, stan)   #wylaczenie wszystkich sekcji
+        self.logger.info(self.obszar, 'Uaktywniono podlewanie: ' + str(stan))
         self.podlewanie_aktywne = stan
         THutils.zapisz_parametr_konfiguracji(self.obszar, 'podlewanie_aktywne', stan, self.logger)
+        self.resetuj_ts()
         self.aktualizuj_biezacy_stan()
 
-    def dzialanie_petli(self, nazwa, stan, tylko_aktualizuj_ts=False):
-        if tylko_aktualizuj_ts:
-            self.resetuj_ts()
-            self.aktualizuj_biezacy_stan()
-            self.aktualizuj_plywaki()
-            return
-        # wywolywane gdy petla nakazala zmiane stanu
+    def dzialanie_petli(self, nazwa, stan, pozycjapetli):
+        self.aktualizuj_plywaki()
         if self.podlewanie_aktywne:
-            stan_poprzzedni = self.wewy.wyjscia.stan_przekaznika_nazwa(nazwa)
-            self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan)
-            self.resetuj_ts()
-            self.aktualizuj_biezacy_stan()
-            if self.wewy.wyjscia.stan_przekaznika_nazwa(nazwa) != stan_poprzzedni:
-                self.logger.info('Podlewanie ' + nazwa + ', stan: ' + str(stan))
-                self.resetuj_ts()
-                self.aktualizuj_biezacy_stan()
+            #stan_poprzzedni = self.wewy.wyjscia.stan_przekaznika_nazwa(nazwa)
+            #self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan)
+            if self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan):
+            #if self.wewy.wyjscia.stan_przekaznika_nazwa(nazwa) != stan_poprzzedni:
+                self.logger.info(self.obszar, 'Podlewanie ' + nazwa + ', stan: ' + str(stan))
+                #self.resetuj_ts()
+                #self.aktualizuj_biezacy_stan()
                 self.odpal_firebase()
+        else:
+            self.logger.warning(self.obszar, 'Proba dzialania na sekcji przy deaktywowanym podlewaniu.')
 
     def aktualizuj_plywaki(self):
         # wywolywane za kazdym przebiegiem petli, bez wzgledu na to czy byla zmiana stanu czy nie
         self.odczytaj_stan_plywakow()
         if self.poprzedni_stan_plywak_studnia != self.plywak_studnia:
-            self.logger.info('Podlewanie: Plywak Studnia: ' + str(self.plywak_studnia))
+            self.logger.info(self.obszar, 'Podlewanie: Plywak Studnia: ' + str(self.plywak_studnia))
             self.poprzedni_stan_plywak_studnia = self.plywak_studnia
             self.resetuj_ts()
         if self.poprzedni_stan_plywak_szambo != self.plywak_szambo:
-            self.logger.info('Podlewanie: Plywak Szambo: ' + str(self.plywak_szambo))
+            self.logger.info(self.obszar, 'Podlewanie: Plywak Szambo: ' + str(self.plywak_szambo))
             self.poprzedni_stan_plywak_szambo = self.plywak_szambo
             self.resetuj_ts()
         self.aktualizuj_biezacy_stan()
@@ -124,19 +140,12 @@ class Podlewanie(Obszar):
         self.plywak_szambo = self.gpio_pigpio.read(self.plywak_szambo_pin)
         self.aktualizuj_biezacy_stan()
 
-    def aktualizuj_biezacy_stan(self):
+    def aktualizuj_biezacy_stan(self, odbiornik_pomieszczenie=None):
         self._biezacy_stan = {'plywak_studnia': THutils.xstr(self.plywak_studnia),
                                               'plywak_szambo': THutils.xstr(self.plywak_szambo),
                                               'podlewanie_aktywne': self.podlewanie_aktywne,
-                                              constants.TS: self.ts,
+                                              constants.TS: self.get_ts(),
                                               constants.CYKLE: self.petla.pozycje_do_listy(
                                                   obszar=constants.OBSZAR_PODL),
                                               constants.ODBIORNIKI: self.wewy.wyjscia.pozycje_do_listy(
                                                   constants.OBSZAR_PODL)}
-
-    def odczytaj_konf(self):
-        self.max_wilg = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_PODL, 'MAX_WILG', self.logger))
-        self.plywak_studnia_pin = int(
-            THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_PODL, 'PLYWAK_STUDNIA_PIN', self.logger))
-        self.plywak_szambo_pin = int(
-            THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_PODL, 'PLYWAK_SZAMBO_PIN', self.logger))
