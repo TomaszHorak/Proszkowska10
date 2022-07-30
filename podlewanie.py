@@ -109,6 +109,8 @@ class Podlewanie(Obszar):
 
     def dzialanie_petli(self, nazwa, stan, pozycjapetli):
         self.aktualizuj_plywaki()
+       	self.resetuj_ts()
+        #self.logger.info(self.obszar, 'dzialanie petli ' + nazwa + ', stan: ' + str(stan))
         if self.podlewanie_aktywne:
             #stan_poprzzedni = self.wewy.wyjscia.stan_przekaznika_nazwa(nazwa)
             #self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan)
@@ -116,7 +118,6 @@ class Podlewanie(Obszar):
             #if self.wewy.wyjscia.stan_przekaznika_nazwa(nazwa) != stan_poprzzedni:
                 self.logger.info(self.obszar, 'Podlewanie ' + nazwa + ', stan: ' + str(stan))
                 #self.resetuj_ts()
-                #self.aktualizuj_biezacy_stan()
                 self.odpal_firebase()
         else:
             self.logger.warning(self.obszar, 'Proba dzialania na sekcji przy deaktywowanym podlewaniu.')
