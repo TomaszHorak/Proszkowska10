@@ -54,42 +54,42 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
 #        if  wer is not None:
 #            return wer
         global status_naglosnienia
-        global status_wzmacniaczy
+        #global status_wzmacniaczy
         odp = {constants.RESULT: constants.STATUS_OK}
         if moje_ip == os.getenv(constants.IP_GARAZ):
             if constants.KOMENDA in params:
                 if params[constants.KOMENDA] == constants.KOMENDA_STAT_RESET_GARAZ:
                     # odp = resetuj()
                     pass
-                elif params[constants.KOMENDA] == constants.KOMENDA_STAT_RESET_STRYCH:
-                    odp = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(),
-                                                               constants.OBSZAR_STAT, logger, params)
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_OSWIETLENIA:
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], oswietlenie.get_biezacy_stan())
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_STEROWANIA:
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], sterowanie.get_biezacy_stan())
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_PODLEWANIA:
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], podlewaj.get_biezacy_stan())
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_SAUNY:
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], sauna.get_biezacy_stan())
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA:
-                    #if len(status_naglosnienia) == 0:
-                    odp = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(),
-                                                               constants.OBSZAR_STAT, logger, params)
-                    status_naglosnienia = odp[constants.RESULT]
+                #elif params[constants.KOMENDA] == constants.KOMENDA_STAT_RESET_STRYCH:
+                #    odp = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(),
+                #                                               constants.OBSZAR_STAT, logger, params)
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_OSWIETLENIA:
+                #    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], oswietlenie.get_biezacy_stan())
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_STEROWANIA:
+                #    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], sterowanie.get_biezacy_stan())
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_PODLEWANIA:
+                #    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], podlewaj.get_biezacy_stan())
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_SAUNY:
+                #    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], sauna.get_biezacy_stan())
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA:
+                #    odp = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(),
+                #                                               constants.OBSZAR_NAGL, logger, params)
+                #    status_naglosnienia = odp[constants.RESULT]
                     #else:
                     #    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], status_naglosnienia)
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE:
+                #TODO usuwamy przetwarzanie komunikatu status_wzmacniaczy w stat
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE:
                     #if len(status_wzmacniaczy) == 0:
-                    odp = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(),
-                                                               constants.OBSZAR_STAT, logger, params)
-                    status_wzmacniaczy = odp[constants.RESULT]
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY:
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], temper.get_biezacy_stan())
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_OGRZEWANIA:
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], ogrzewanie.get_biezacy_stan())
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_SZYBKIE_AKCJE:
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], szybkieAkcje.get_biezacy_stan())
+                #    odp = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(),
+                #                                               constants.OBSZAR_STAT, logger, params)
+                #    status_wzmacniaczy = odp[constants.RESULT]
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_TEMPERATURY:
+                #    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], temper.get_biezacy_stan())
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_OGRZEWANIA:
+                #    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], ogrzewanie.get_biezacy_stan())
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_SZYBKIE_AKCJE:
+                #    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], szybkieAkcje.get_biezacy_stan())
                 elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STATUS_SKROCONY:
                     odp = wyslij_status_skrocony()
                 elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_LOG_GARAZ:
@@ -120,11 +120,6 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
                                                              params[constants.POLE_STAN], logger)
                 else:
                     odp = wyslij_status_skrocony()
-            if constants.RODZAJ_KOMUNIKATU in params: #tutaj procesujemy status z strychu
-                if params[constants.RODZAJ_KOMUNIKATU] == constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE:
-                    status_wzmacniaczy = params[constants.RESULT]
-                if params[constants.RODZAJ_KOMUNIKATU] == constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA:
-                    status_naglosnienia = params[constants.RESULT]
 
 
         else: #sekcja dla strychu
@@ -132,10 +127,10 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
                 if params[constants.KOMENDA] == constants.KOMENDA_STAT_RESET_STRYCH:
                     #odp = resetuj()
                     pass
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA:
-                    odp = naglosnienie.biezacy_stan.biezacy_stan_odpowiedzV2()
-                elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE:
-                    odp = naglosnienie.biezacy_stan.wzmacniacze_stan_odpowiedzV2()
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA:
+                #    odp = naglosnienie.biezacy_stan.biezacy_stan_odpowiedzV2()
+                #elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE:
+                #    odp = naglosnienie.biezacy_stan.wzmacniacze_stan_odpowiedzV2()
                 elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_LOG_NAGLOSNIENIE:
                     plik_logu = THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_P10,
                                                                        'PLIK_LOGU', None)
@@ -178,14 +173,25 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
 #            return wer
         return temper.procesuj_polecenie(**params)
 
+
     @pyjsonrpc.rpcmethod
     def nagl(self, **params):
 #        wer = self.weryfikuj_apki_key(apikey)
 #        if wer is not None:
 #            return wer
+        global status_naglosnienia
         if moje_ip == os.getenv(constants.IP_GARAZ):
-            odp = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_NAGL,
-                                                       logger,  params)
+            if constants.RODZAJ_KOMUNIKATU in params: #tutaj procesujemy status z strychu
+                if params[constants.RODZAJ_KOMUNIKATU] == constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA:
+                    status_naglosnienia = params[constants.RESULT]
+                    odp =  THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_LOG_NAGLOSNIENIE, params[constants.RESULT])
+                    #logger.info("P10", 'mam rodzaj komunikatu ' + str(params))
+                    #print ('mam rodzaj kom' + str(params))
+            if constants.KOMENDA in params:
+                odp = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_NAGL, logger,  params)
+            #    odp = 'jest komenda' + str(params)
+            #else:
+            #    odp = 'nie ma rodzju komunikatu a jest ' + str(params)
         else:
             odp = naglosnienie.procesuj_polecenie(**params)
         return odp
@@ -227,9 +233,9 @@ def wyslij_status_skrocony():
         tshistorii = status_naglosnienia[constants.POLE_TIMESTAMP_HISTORII]
         tsulub = status_naglosnienia[constants.POLE_TIMESTAMP_ULUBIONYCH]
         tswzmac = status_naglosnienia[constants.POLE_TIMESTAMP_WZMACNIACZY]
-
     except (KeyError, TypeError) as serr:
         logger.warning(constants.OBSZAR_P10, 'Nie moge odczytac statusu z naglosnienia, zmienna nie ustawiona: ' + str(serr))
+        
     stat_prosty = {constants.POLE_TIMESTAMP_NAGLOSNIENIA: tsnagl,
                    constants.POLE_TIMESTAMP_RADII: tsradii,
                    constants.POLE_TIMESTAMP_ULUBIONYCH: tsulub,
@@ -290,8 +296,8 @@ if moje_ip == os.getenv(constants.IP_GARAZ):
     notyfikacja_firebase = firebasenotification.Firebasenotification(logger)
     wewy = wejsciawyjscia.WejsciaWyjscia(logger, wejsca=True, wyjscia=True)
     petla = petlaczasowa.PetlaCzasowa(logger)
-    status_naglosnienia = THutils.zapytaj_o_status_zdalnie(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_STAT, constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA, logger)
-    status_wzmacniaczy = THutils.zapytaj_o_status_zdalnie(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_STAT, constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE, logger)
+    status_naglosnienia = THutils.zapytaj_o_status_zdalnie(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_NAGL, constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA, logger)
+    #status_wzmacniaczy = THutils.zapytaj_o_status_zdalnie(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_STAT, constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE, logger)
     oswietlenie = Oswietlenie(wewy, petla, logger, firebase_callback=wyslij_firebase_ze_statusem)
     temper = Temperatura(wewy, petla, logger_temp,firebase_callback=wyslij_firebase_ze_statusem)
     podlewaj = podlewanie.Podlewanie(wewy, petla, logger, firebase_callback=wyslij_firebase_ze_statusem)
