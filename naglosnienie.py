@@ -106,7 +106,7 @@ class BiezacyStan:
 
     def wzmacniacze_stan_odpowiedzV2(self):
         return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE,
-                                                self.wzmacniacze)
+                                                self.wzmacniacze, constants.OBSZAR_NAGL)
 
 class Naglosnienie:
     def __init__(self, logger):
@@ -153,14 +153,14 @@ class Naglosnienie:
                 return self.katalog_radii.wyslij_katalog_radii()
             elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_PLAYLISTA:
                 return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_PLAYLISTA,
-                                                        self.aktualna_playlista.wyslij_playliste(pelna=False))
+                                                        self.aktualna_playlista.wyslij_playliste(pelna=False), constants.OBSZAR_NAGL)
             elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_HISTORIA:
             # TODO liczba linii historii do parametrow
                 poz = {constants.TS: self.biezacy_stan.ts_historii,
                       constants.POZYCJE: self.aktualna_playlista.odczytaj_historie()}
-                return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_HISTORIA, poz)
+                return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_HISTORIA, poz, constants.OBSZAR_NAGL)
             elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE:
-                return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE, self.wzmacniacze.do_listy())
+                return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE, self.wzmacniacze.do_listy(), constants.OBSZAR_NAGL)
             elif params[constants.KOMENDA] == constants.KOMENDA_GLOSNOSC_DELTA:  # wykorzystuje delte a nie bezwgledna wartosc glosnosci
                 if constants.POLE_GLOSNOSC in params:
                     if constants.NAZWA in params:
@@ -191,7 +191,7 @@ class Naglosnienie:
                 # else:
                 #    return THutils.skonstruuj_odpowiedzV2(constants.RODZAJ_KOMUNIKATU_LIRYKI, '', constants.STATUS_NOK)
                 return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_LIRYKI,
-                                                        {constants.RODZAJ_KOMUNIKATU_LIRYKI: self.liryki.tekstPiosenki})
+                                                        {constants.RODZAJ_KOMUNIKATU_LIRYKI: self.liryki.tekstPiosenki}, constants.OBSZAR_NAGL)
             #elif params[constants.KOMENDA] == 'SPOTIFY':
             #    if parametr1 == 'L+01':
             #        threading.Thread(target=self.aktualna_playlista.dodaj_z_linku_spotify, args=(parametr2,)).start()
@@ -204,18 +204,18 @@ class Naglosnienie:
                     if constants.NEXT in params:
                         spot = spotify_klasa.SpotifyKlasa(self.logger, self.obszar)
                         odp = spot.szukaj_zdalnie(params[constants.QUERY], next = params[constants.NEXT])
-                        return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_SPOTIFY_QUERY, odp)
+                        return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_SPOTIFY_QUERY, odp, constants.OBSZAR_NAGL)
             elif params[constants.KOMENDA] == 'SPOTIFY_NEXT':
                 if constants.POLE_WARTOSC in params:
                     spot = spotify_klasa.SpotifyKlasa(self.logger, self.obszar)
                     odp = spot.nastepny(params[constants.POLE_WARTOSC])
-                    return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_SPOTIFY_NEXT, odp)
+                    return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_SPOTIFY_NEXT, odp, constants.OBSZAR_NAGL)
             elif params[constants.KOMENDA] == 'SPOTIFY_ROZWINIECIE':
                 if constants.URI in params:
                     if constants.SPOTIFY_RODZAJ in params:
                         spot = spotify_klasa.SpotifyKlasa(self.logger, self.obszar)
                         odp = spot.rozwin(params[constants.SPOTIFY_RODZAJ], params[constants.URI])
-                        return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_SPOTIFY_ROZWIN, odp)
+                        return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_SPOTIFY_ROZWIN, odp, constants.OBSZAR_NAGL)
 #            elif komenda == 'RO':
                 #thread.start_new_thread(self.odtwarzaj_z_radii_po_nazwie, (parametr1, parametr2))
 #                self.odtwarzaj_z_radii_po_nazwie(parametr1, parametr2)
@@ -282,7 +282,7 @@ class Naglosnienie:
                     self.aktualizuj_status_odtwarzacza(wymus=True)
         self.aktualizuj_status_odtwarzacza()
         return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA,
-                                                self.biezacy_stan.biezacyStanDoTuple())
+                                                self.biezacy_stan.biezacyStanDoTuple(), constants.OBSZAR_NAGL)
 
     def odtworz_z_historii(self, hash_historii, dodaj=False):
         hist = self.aktualna_playlista.odczytaj_historie()
@@ -473,7 +473,7 @@ class Naglosnienie:
             # TODO czy nie mozna przejsc zawsze na self.odtwarzacz.tytul?
             if poz.typ == playlista.TYP_RADIO:
                 if poz.serwis_radiowy == radia.NAZWA_SERWISU_OPENFM:
-                    if poz.ts_stop < int(time.time()):
+                    if poz.ts_stop < time.time()*1000:
                         if self.wzmacniacze.czy_ktorykolwiek_wlaczony():
                             artysta, album, tytul_utworu, ts_konca = self.katalog_radii.odswiez_co_grane_openfm(poz.id_stacji_radiowej)
                             poz.album = album
@@ -481,8 +481,8 @@ class Naglosnienie:
                             poz.title = tytul_utworu
                             tytul = tytul_utworu
                             # kontrola nie za czestego odczytywania co grane
-                            if ts_konca < int(time.time()):
-                                poz.ts_stop = int(time.time()) + radia.INTERWAL_ODCZYTU_CO_GRANE
+                            if ts_konca < time.time()*1000:
+                                poz.ts_stop = time.time()*1000 + radia.INTERWAL_ODCZYTU_CO_GRANE
                             else:
                                 poz.ts_stop = ts_konca
                 else:
@@ -546,7 +546,7 @@ class Naglosnienie:
         #    self.przekaz_stan_naglosnienia_do_garazu()
 
         if fire:
-            self.biezacy_stan.ts = int(time.time())
+            self.biezacy_stan.ts = time.time()*1000
             self.przekaz_stan_naglosnienia_do_garazu()
 
         #if self.biezacy_stan.ts_wzmacniaczy != poprzedni_stan.ts_wzmacniaczy:
@@ -640,7 +640,7 @@ class Naglosnienie:
         self.odtwarzaj_z_playlisty()
 
     def play_pause(self):
-        self.kasuj_czas_ostatniej_aktywnosci()
+        #self.kasuj_czas_ostatniej_aktywnosci()
         self.czas_ostatniego_polecenia_odtwarzania = datetime.datetime.now()
         self.pauza = not self.pauza
 
@@ -731,7 +731,7 @@ class Naglosnienie:
 
     def toggle_wzmacniacz_nazwa(self, nazwa):
         if self.wzmacniacze.toggle_wzmacniacz_nazwa(nazwa):
-            self.ts = int(time.time())        
+            self.ts = time.time()*1000
             self.kasuj_czas_ostatniej_aktywnosci()
             
             # pauza jesli wszystko beda wylaczone
@@ -747,6 +747,7 @@ class Naglosnienie:
         if roznica.total_seconds() > self._czas_maksymalnego_braku_aktywnosci:
             if self.wzmacniacze.czy_ktorykolwiek_wlaczony():
                 self.wzmacniacze.wlacz_wylacz_wszystkie(False)  # wylacz_wszystkie_wzmacniacze()
+                self.play_pause()
                 self.aktualizuj_status_odtwarzacza()
                 self.logger.info(self.obszar, 'Wylaczam wzmacn przy braku aktywnosci. Czas ostatn aktywn: ' +
                                  str(self.czas_ostatniej_aktywnosci))

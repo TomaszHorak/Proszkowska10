@@ -1,5 +1,5 @@
 import os
-import logging
+from MojLogger import MojLogger
 import THutils
 import constants
 import shutil
@@ -10,17 +10,17 @@ from random import getrandbits
 
 
 class PozycjaUubionego(playlista.Playlista):
-    def __init__(self, nazwa, pozycje, plik):
-        super(PozycjaUubionego, self).__init__(nazwa=nazwa)
+    def __init__(self, obszar, loger, nazwa, pozycje, plik):
+        super(PozycjaUubionego, self).__init__(obszar, loger, nazwa=nazwa)
         self.pozycje = pozycje
         self._nr = getrandbits(32)
         self._plik = plik
         return
 
     def pozycja_do_listy(self, pelna=False):
-        play = self.pozycje[0]  # type: playlista.PozycjaPlaylisty
+        fanart = self.pozycje[0]  # type: playlista.PozycjaPlaylisty
         pozycja = {constants.NR: self._nr,
-                   constants.FANART: play.fanart,
+                   constants.FANART: fanart.fanart,
                    constants.NAZWA: self.nazwa,
                    playlista.TYP: self.pozycje[0].typ,
                    playlista.LICZBA_POZYCJI: self.liczba_pozycji()}
@@ -38,8 +38,9 @@ class PozycjaUubionego(playlista.Playlista):
 
 
 class Ulubione:
-    def __init__(self):
-        self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
+    def __init__(self, obszar, logger):
+        self.logger = logger #type: MojLogger
+        self.obszar = obszar
         self.ulubione = []
         self.odswiez_ulubione()
         return
@@ -60,24 +61,30 @@ class Ulubione:
                 return a
         return None
 
+    def ulubiony_po_nazwie(self, nazwa_ulubionego):
+        for a in self.ulubione:
+            if a.get_nazwa() == nazwa_ulubionego:
+                return a
+        return None
+
     def usun_ulubione(self, nrulubionego):
         ul = self.ulubiony_po_numerze(nrulubionego)
         if ul is None:
-            self.logger.warning('Prosba o usuniecie ulubionego, ktory nie istnieje: ' + str(nrulubionego))
+            self.logger.warning(self.obszar, 'Prosba o usuniecie ulubionego, ktory nie istnieje: ' + str(nrulubionego))
             return
         link = ul.get_plik()
         try:
             os.remove(link)
         except OSError:
-            self.logger.warning('Nie udalo sie usunac ulubionego: ' + str(link))
+            self.logger.warning(self.obszar, 'Nie udalo sie usunac ulubionego: ' + str(link))
             return
         katalog = link + playlista.SUFFIX_ULUBIONYCH_PLIKI
         if os.path.isdir(katalog):
             try:
                 shutil.rmtree(katalog)
             except OSError:
-                self.logger.warning('Nie udalo sie usunac katalogu ulubionego: ' + katalog)
-        self.logger.info('Usunalem ulubione: ' + str(nrulubionego))
+                self.logger.warning(self.obszar, 'Nie udalo sie usunac katalogu ulubionego: ' + katalog)
+        self.logger.info(self.obszar, 'Usunalem ulubione: ' + str(nrulubionego))
         self.odswiez_ulubione()
         return
 
@@ -90,23 +97,15 @@ class Ulubione:
 #            pozy.append(x)
         dane = {constants.TS: self.ts,
                constants.POZYCJE: pozy}
-        return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_ULUBIONE, dane)
-
-    def arduino_wyslij_ulubione(self):
-        dane = ''
-        for a in self.ulubione:
-            dane += a.get_nazwa()
-            dane += "|"
-        return dane
+        return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_ULUBIONE, dane, constants.OBSZAR_NAGL)
 
     def odswiez_ulubione(self):
         katalog_ulubionych = constants.KATALOG_ULUBIONYCH
-        #str(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_NAGL, 'KATALOG_ULUBIONYCH', self.logger))
         if katalog_ulubionych == '':
             return
         self.ulubione = []
         #numer = 0
-        self.logger.info('Rozpoczynam pobieranie ulubionych z katalogu: ' + katalog_ulubionych)
+        self.logger.info(self.obszar, 'Rozpoczynam pobieranie ulubionych z katalogu: ' + katalog_ulubionych)
         #filenames = os.listdir(katalog_ulubionych)
         filenames = glob.glob(katalog_ulubionych + '/*')
         filenames.sort(key=os.path.getmtime)
@@ -115,12 +114,12 @@ class Ulubione:
             #p = katalog_ulubionych + '/' + f
             if os.path.isdir(f):
                 continue
-            pl = playlista.Playlista(plik=str(f))
+            pl = playlista.Playlista(self.obszar, self.logger, plik=str(f))
             #numer = numer + 1
             # pl.inicjalizuj_playliste_z_pliku(nazwa_pliku=str(p))
             if len(pl.pozycje) > 0:
                 #fanart = pl.pozycje[0].fanart
                 #typ = pl.pozycje[0].typ
-                self.ulubione.append(PozycjaUubionego(pl.nazwa, pl.pozycje, f))
-        self.ts = int(time.time())
-        self.logger.info('Pobralem ulubione. Liczba ulubionych: ' + str(len(self.ulubione)))
+                self.ulubione.append(PozycjaUubionego(self.obszar, self.logger, pl.nazwa, pl.pozycje, f))
+        self.ts = time.time()*1000
+        self.logger.info(self.obszar, 'Pobralem ulubione. Liczba ulubionych: ' + str(len(self.ulubione)))

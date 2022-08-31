@@ -68,7 +68,7 @@ class Ogrzewanie(Obszar):
                         logger,
                         petla=petla,
                         wewy=wewy,
-                        callback_przekaznika_wyjscia=self.resetuj_ts,
+                        #callback_przekaznika_wyjscia=self.resetuj_ts,
                         rodzaj_komunikatu=constants.RODZAJ_KOMUNIKATU_STAN_OGRZEWANIA,
                         dzialanie_petli=self.dzialanie_petli)
 
@@ -148,6 +148,7 @@ class Ogrzewanie(Obszar):
                 self.logger.info(self.obszar, 'Koniec wakacji')
                 self.wakacje_trwaja = False
                 self.wakacje_zaplanowane = False
+            self.logger.info(self.obszar, 'Resetuje TS w dzialanie petli WAKACJE')
             self.resetuj_ts()
             return
         if nazwa == PETLA_STERUJ_CYKLICZNIE:
@@ -166,6 +167,7 @@ class Ogrzewanie(Obszar):
         #funckja ma byc wywolywana z petli, o nazwie 'steruj_cyklicznie'
         if not self.__ogrzewanie_aktywne:
             for a in self._tabela:  # type: Pomieszczenie
+                #self.logger.info(self.obszar, 'Wylaczam wszystkie bo ogrzewanie nieaktywne')
                 self.wewy.wyjscia.ustaw_przekaznik_nazwa(a.get_nazwa(), False)
             return
         for a in self._tabela:  # type: Pomieszczenie
@@ -193,8 +195,8 @@ class Ogrzewanie(Obszar):
                     if constants.NAZWA in params:
                         if constants.POLE_TEMP_ZADANA in params:
                             if j.get_nazwa() == params[constants.NAZWA]:
-                                j.zadaj_temp(params[constants.POLE_TEMP_ZADANA])
-                                self.resetuj_ts()
+                                if j.zadaj_temp(params[constants.POLE_TEMP_ZADANA]):
+                                    self.resetuj_ts()
             elif params[constants.KOMENDA] == constants.KOMENDA_PODAJ_TEMP:
                 #szukamy ktore to pomieszczenie, w parametr 1
                 #w parametr 2 ma byc odczytana przez NodeMCU temperatura
@@ -211,10 +213,11 @@ class Ogrzewanie(Obszar):
                 if constants.NAZWA in params:
                     self.aktualizuj_biezacy_stan(odbiornik_pomieszczenie=params[constants.NAZWA])
                     self.procesuje.release()
-                    return skonstruuj_odpowiedzV2OK(constants.KOMENDA_STATUS_POMIESZCZENIA, self._biezacy_stan)
+                    return skonstruuj_odpowiedzV2OK(constants.KOMENDA_STATUS_POMIESZCZENIA, self._biezacy_stan, constants.OBSZAR_OGRZ)
             elif params[constants.KOMENDA] == constants.KOMENDA_WAKACJE:
                 if constants.POLE_WAKACJE in params:
                     self.ustaw_tryb_wakacje(params[constants.POLE_WAKACJE])
+                self.logger.info(self.obszar, 'Resetuje TS bo jest komenda wakacje ale nie ma pola wakacje: ' + str(params))
                 self.resetuj_ts()
             elif params[constants.KOMENDA] == constants.KOMENDA_AKTYWUJ_OGRZEWANIE:
                 if constants.POLE_STAN in params:
@@ -346,7 +349,10 @@ class Pomieszczenie:
         if a < self.__tempMin:
             return False
         #jesli w granicach to przypisac do self.tempZadana
+        if self.__logger:
+            self.__logger.info(self.__obszar, 'Zadalem temperature ' + self.__nazwa + ' na ' + str(temp_zadana))
         self.__tempZadana = a
+        return True
 
     def get_nazwa(self):
         return self.__nazwa

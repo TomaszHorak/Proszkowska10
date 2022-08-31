@@ -1,78 +1,96 @@
-import tda8425
 import constants
 import time
+import max9744
+import RPi.GPIO as GPIO
 
-NR_WZMACNIACZA_KUCHNIA = 0
-NR_WZMACNIACZA_TARAS = 1
-NR_WZMACNIACZA_LAZIENKA = 2
-NR_WZMACNIACZA_SYPIALNIA = 3
-NR_WZMACNIACZA_BALKON = 4
-NR_WZMACNIACZA_DENON = 5
 NAZWA_WZMACNIACZA_KUCHNIA = "Kuchnia"
 NAZWA_WZMACNIACZA_TARAS = "Taras"
 NAZWA_WZMACNIACZA_LAZIENKA = "Lazienka"
-NAZWA_WZMACNIACZA_SYPIALNIA = "Sypialnia"
-NAZWA_WZMACNIACZA_BALKON = "Balkon"
-NAZWA_WZMACNIACZA_DENON = "Denon"
-PIN_WZMACNIACZA_KUCHNIA = 7
-PIN_WZMACNIACZA_TARAS = 6
-PIN_WZMACNIACZA_LAZIENKA = 5
-PIN_WZMACNIACZA_SYPIALNIA = 3
-PIN_WZMACNIACZA_BALKON = 4
 
+#piny wzmacniacza oznaczaja pin na plycie raspberry podlaczony do MUTE w max9744
+PIN_WZMACNIACZA_KUCHNIA = 17
+PIN_WZMACNIACZA_TARAS = 27
+PIN_WZMACNIACZA_LAZIENKA = 22
 
 class Wzmacniacze:
-    def __init__(self, wewy, logger):
-        """tab = [{'numer': NR_WZMACNIACZA_KUCHNIA, 'nazwa': NAZWA_WZMACNIACZA_KUCHNIA, 'pin': 7},
-               {'numer': NR_WZMACNIACZA_TARAS, 'nazwa': NAZWA_WZMACNIACZA_TARAS, 'pin': 6},
-               {'numer': NR_WZMACNIACZA_LAZIENKA, 'nazwa': NAZWA_WZMACNIACZA_LAZIENKA, 'pin': 5},
-               {'numer': NR_WZMACNIACZA_SYPIALNIA, 'nazwa': NAZWA_WZMACNIACZA_SYPIALNIA, 'pin': 3},
-               {'numer': NR_WZMACNIACZA_BALKON, 'nazwa': NAZWA_WZMACNIACZA_BALKON, 'pin': 4}]"""
-        self.przek = wewy.wyjscia
-        #TODO dodac callback function we wzamcnaiczach
-        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_KUCHNIA, PIN_WZMACNIACZA_KUCHNIA, obszar=constants.OBSZAR_NAGL)
-        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_TARAS, PIN_WZMACNIACZA_TARAS, obszar=constants.OBSZAR_NAGL)
-        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_LAZIENKA, PIN_WZMACNIACZA_LAZIENKA, obszar=constants.OBSZAR_NAGL)
-        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_SYPIALNIA, PIN_WZMACNIACZA_SYPIALNIA, obszar=constants.OBSZAR_NAGL)
-        self.przek.dodaj_przekaznik(NAZWA_WZMACNIACZA_BALKON, PIN_WZMACNIACZA_BALKON, obszar=constants.OBSZAR_NAGL)
+    def __init__(self, logger):
+        #ustawienie wyjsc sterujacych MUTem
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        GPIO.setup(PIN_WZMACNIACZA_TARAS, GPIO.OUT)  # set a port/pin as an output
+        GPIO.setup(PIN_WZMACNIACZA_KUCHNIA, GPIO.OUT)  # set a port/pin as an output
+        GPIO.setup(PIN_WZMACNIACZA_LAZIENKA, GPIO.OUT)  # set a port/pin as an output
 
-        self.wzmacniacze = []
-        self.wzmacniacze.append(tda8425.TDA8425(NR_WZMACNIACZA_KUCHNIA, NAZWA_WZMACNIACZA_KUCHNIA))
-        self.wzmacniacze.append(tda8425.TDA8425(NR_WZMACNIACZA_TARAS, NAZWA_WZMACNIACZA_TARAS))
-        self.wzmacniacze.append(tda8425.TDA8425(NR_WZMACNIACZA_LAZIENKA, NAZWA_WZMACNIACZA_LAZIENKA))
-        self.wzmacniacze.append(tda8425.TDA8425(NR_WZMACNIACZA_SYPIALNIA, NAZWA_WZMACNIACZA_SYPIALNIA))
-        self.wzmacniacze.append(tda8425.TDA8425(NR_WZMACNIACZA_BALKON, NAZWA_WZMACNIACZA_BALKON))
+        self.wzmacniacze = []   #type: [max9744.MAX9744]
+        self.wzmacniacze.append(max9744.MAX9744(NAZWA_WZMACNIACZA_KUCHNIA, max9744.MAX9744_I2CADDR_4A, PIN_WZMACNIACZA_KUCHNIA, GPIO))
+        self.wzmacniacze.append(max9744.MAX9744(NAZWA_WZMACNIACZA_LAZIENKA, max9744.MAX9744_I2CADDR_49, PIN_WZMACNIACZA_LAZIENKA, GPIO))
+        self.wzmacniacze.append(max9744.MAX9744(NAZWA_WZMACNIACZA_TARAS, max9744.MAX9744_I2CADDR_4B, PIN_WZMACNIACZA_TARAS, GPIO))
         self.logger = logger
-        self.ts = self.ts = int(time.time())
+        self.ts = time.time()*1000
         return
 
+    def czy_ktorykolwiek_wlaczony(self):
+        for j in self.wzmacniacze:
+            if j.stan:
+                return True
+        return False
+
     def do_listy(self):
-        temp = {}
-        temp[constants.TS] = self.ts
+        temp = {constants.TS: self.ts}
         for i in self.wzmacniacze:
             temp1 = {constants.POLE_GLOSNOSC: i.glosnosc,
-                     # constants.POLE_NR_WEJSCIA: i.nr_wejscia,
-                     constants.POLE_STAN: self.przek.stan_przekaznika_nazwa(i.nazwa)}
+                     constants.POLE_STAN: self.wzmacniacz_po_nazwie(i.nazwa).stan}
             temp[i.nazwa] = temp1
-        # odswiezenie wzmacniacza Denon
-        # temp2 = {"Nazwa_wejscia": self.den.current_source,
-#                 "Glosnosc": int(self.den.current_volume),
- #                "Stan": self.den.current_ispwon}
-  #      temp["Denon"] = temp2
-        #dane["Wzmacniacze"] = temp
         return temp
 
     def set_glosnosc_nazwa(self, nazwa, glosnosc):
         wzm = self.wzmacniacz_po_nazwie(nazwa)
-        #if self.przek.stan_przekaznika_nazwa(nazwa):
-        wzm.ustaw_glosnosc(glosnosc)
-        self.ts = int(time.time())
+        if wzm:
+            wzm.ustaw_glosnosc(glosnosc)
+            self.ts = time.time()*1000
+            return True
+        return False
 
     def set_glosnosc_delta_nazwa(self, nazwa, liczba_krokow):
-        #if self.przek.przekaznik_po_nazwie(nazwa).get_stan():
         wzm = self.wzmacniacz_po_nazwie(nazwa)
-        wzm.ustaw_glosnosc(int(wzm.glosnosc + liczba_krokow))
-        self.ts = int(time.time())
+        if wzm:
+            wzm.ustaw_glosnosc(int(wzm.glosnosc + liczba_krokow))
+            self.ts = time.time()*1000
+            return True
+        return False
+
+    def wlacz_wylacz_wszystkie(self, stan):
+        for j in self.wzmacniacze:
+            j.wlacz_wylacz(stan)
+        self.ts = time.time()*1000
+
+    def stan_wzmacniacza_po_nazwie(self, nazwa):
+        wzm = self.wzmacniacz_po_nazwie(nazwa)
+        return wzm.stan
+
+    def wlacz_wylacz(self, nazwa, stan):
+        a = self.wzmacniacz_po_nazwie(nazwa)    #type: [max9744.MAX9744]
+        if a:
+            a.wlacz_wylacz(stan)
+            self._zmiana_stanu(nazwa, stan)
+            return True
+        return False
+
+    def toggle_wzmacniacz_nazwa(self, nazwa):
+        a = self.wzmacniacz_po_nazwie(nazwa)    #type: [max9744.MAX9744]
+        if a:
+            if a.stan:
+                a.wlacz_wylacz(False)
+                self._zmiana_stanu(nazwa, False)
+            else:
+                a.wlacz_wylacz(True)
+                self._zmiana_stanu(nazwa, True)
+            return True
+        return False
+
+    def _zmiana_stanu(self, nazwa, stan):
+            self.logger.info(constants.OBSZAR_NAGL, 'Zmiana stanu wzmacniacza ' + str(nazwa) + ' na ' + str(stan))
+            self.ts = time.time()*1000
 
     def wzmacniacz_po_nazwie(self, nazwa):
         for j in self.wzmacniacze:

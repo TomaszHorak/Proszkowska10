@@ -7,7 +7,7 @@ import xml.etree.ElementTree
 import ConfigParser
 import os
 import xml.dom.minidom as minidom
-import logging
+from MojLogger import MojLogger
 import time
 import requests
 from THutils import skonstruuj_odpowiedzV2OK
@@ -48,11 +48,12 @@ class Radio:
 
 # TODO przejscie na klase radio z metodami typu get_name
 class Radia:
-    def __init__(self):
+    def __init__(self, obszar, logger):
+        self.obszar = obszar
         self.stacje_radiowe = []
-        self.ts = int(time.time())
+        self.ts = time.time()*1000
         self._ts_odczytywania_co_grane = 0  #aby nie za czesto odczytywac co grane
-        self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
+        self.logger = logger    #type: MojLogger
 
     def pobierz_radia_cyklicznie(self):
         threading.Thread(target=self.aktualizuj_stacje).start()
@@ -68,7 +69,7 @@ class Radia:
                             constants.ID:a.id_radia})
         dane = {constants.TS: self.ts,
                 constants.POZYCJE: katalog_radii}
-        return skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_KATALOG_RADII, dane)
+        return skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_KATALOG_RADII, dane, constants.OBSZAR_NAGL)
 
 
     def aktualizuj_stacje(self):
@@ -77,9 +78,9 @@ class Radia:
         self.dodaj_stacje_tunein()
         self.dodaj_stacje_rmf()
         self.dodaj_stacje_polskieradio()
-        self.logger.info('Zaktualizowalem liste radii. Liczba stacji: ' +
+        self.logger.info(self.obszar, 'Zaktualizowalem liste radii. Liczba stacji: ' +
                          str(len(self.stacje_radiowe)))
-        self.ts = int(time.time())
+        self.ts = time.time()*1000
         return
 
     def znajdz_stacje_po_nazwie_i_serwisie(self, nazwa_serw, nazwa_sta):
@@ -117,19 +118,19 @@ class Radia:
             dom = minidom.parseString(xmlstr)
             asx = dom.childNodes[0]
             for node in asx.childNodes:
-                if (str(node.localName).lower() == 'entryref' and node.hasAttribute('href')):
+                if str(node.localName).lower() == 'entryref' and node.hasAttribute('href'):
                     streams.append(node.getAttribute('href'))
-                elif (str(node.localName).lower() == 'entryref' and node.hasAttribute('HREF')):
+                elif str(node.localName).lower() == 'entryref' and node.hasAttribute('HREF'):
                     streams.append(node.getAttribute('HREF'))
-                elif (str(node.localName).lower() == 'entry'):
+                elif str(node.localName).lower() == 'entry':
                     for subnode in node.childNodes:
-                        if (str(subnode.localName).lower() == 'ref' and subnode.hasAttribute('href') and not subnode.getAttribute('href') in streams):
+                        if str(subnode.localName).lower() == 'ref' and subnode.hasAttribute('href') and not subnode.getAttribute('href') in streams:
                             streams.append(subnode.getAttribute('href'))
-                        elif (str(subnode.localName).lower() == 'ref' and subnode.hasAttribute('HREF') and not subnode.getAttribute('HREF') in streams):
+                        elif str(subnode.localName).lower() == 'ref' and subnode.hasAttribute('HREF') and not subnode.getAttribute('HREF') in streams:
                             streams.append(subnode.getAttribute('HREF'))
             f.close()
-        except (Exception) as serr:
-            self.logger.warning('Nie moge parsowac ASX. Blad: ' + str(serr))
+        except Exception as serr:
+            self.logger.warning(self.obszar, 'Nie moge parsowac ASX. Blad: ' + str(serr))
         return streams
 
     def parse_m3u(self, url):
@@ -143,7 +144,7 @@ class Radia:
             f.close()
         except urllib2.HTTPError as serr:
             #THutils.zapisz_do_logu_plik('E', 'Nie moge parsowac M3U. Blad: ' + str(serr))
-            self.logger.warning('Nie moge parsowac M3U. Blad: ' + str(serr))
+            self.logger.warning(self.obszar, 'Nie moge parsowac M3U. Blad: ' + str(serr))
         return streams
 
     def parse_pls(self, url):
@@ -154,13 +155,13 @@ class Radia:
             config = ConfigParser.RawConfigParser()
             config.readfp(f)
             numentries = config.getint('playlist', 'NumberOfEntries')
-            while (numentries > 0):
+            while numentries > 0:
                 streams.append(
                     config.get('playlist', 'File' + str(numentries)))
                 numentries -= 1
             f.close()
         except (urllib2.URLError, urllib2.HTTPError, ConfigParser.NoSectionError, ConfigParser.NoOptionError, ConfigParser.MissingSectionHeaderError) as serr:
-            self.logger.warning('Blad podczas parsowania PLS. Link: ' + str(url))
+            self.logger.warning(self.obszar, 'Blad podczas parsowania PLS. Link: ' + str(url))
         return streams
 
     def dodaj_renderjson(self, link):
@@ -181,8 +182,7 @@ class Radia:
                         nazwa_stacji = j['text']
                         id_stacji = j['guide_id']
                         logo = j['image']
-                        gr = []
-                        gr.append(nazwa_grupy)
+                        gr = [nazwa_grupy]
                         #self.dodaj_stacje(NAZWA_SERWISU_TUNEIN, id_stacji, nazwa_stacji, link_stacja, logo, gr)
 
                         # TODO tunein tylko jedna grupa dla stacji do sprawdzenia?
@@ -192,7 +192,7 @@ class Radia:
                         self.stacje_radiowe.append(stacja)
             except KeyError as serr:
                 #THutils.zapisz_do_logu_plik('E', 'Blad klucza: ' + str(serr) + ' Stacja: ' + str(j))
-                self.logger.warning('Blad klucza: ' + str(serr) + ' Stacja: ' + str(j))
+                self.logger.warning(self.obszar, 'Blad klucza: ' + str(serr) + ' Stacja: ' + str(j))
         #self.tunein_aktualizuj_stream_dla_wszystkich_stacji()
         return
         #{'serwis': nazwa_serwisu, 'id': id, 'nazwa': nazwa, 'link': link, 'logo': logo, 'grupa': grupa})
@@ -226,7 +226,7 @@ class Radia:
             #THutils.zapisz_do_logu_plik('E', 'TuneIn stacja bez linku : ' + str(link_stacja))
         #    self.logger.warning('TuneIn stacja bez linku : ' + str(link_stacja))
         if len (m3usy) == 0:
-            self.logger.warning('TuneIn stacja bez linku : ' + str(link_stacja))
+            self.logger.warning(self.obszar, 'TuneIn stacja bez linku : ' + str(link_stacja))
             return ''
         else:
             return m3usy[0]
@@ -247,7 +247,7 @@ class Radia:
             result = str(urllib2.urlopen(link).read())
         except (urllib2.URLError, urllib2.HTTPError) as serr:
             #THutils.zapisz_do_logu_plik('E', 'Blad podczas odczytu glownego linku z TuneIN. Blad: ' + str(serr))
-            self.logger.warning('Blad podczas odczytu glownego linku z TuneIN. Blad: ' + str(serr))
+            self.logger.warning(self.obszar, 'Blad podczas odczytu glownego linku z TuneIN. Blad: ' + str(serr))
             return
         js = json.JSONDecoder().decode(result)
         return js
@@ -265,9 +265,9 @@ class Radia:
                     for aa in lista_grup_world['body'][2]['children']:
                         self.dodaj_tunein_outline(aa)
                 self.dodaj_tunein_outline(j)
-            self.logger.info('Dodalem stacje TuneIn.')
+            self.logger.info(self.obszar, 'Dodalem stacje TuneIn.')
         except TypeError as serr:
-            self.logger.warning('Nie moge odczytac stacji TuneIn: ' + str(serr))
+            self.logger.warning(self.obszar, 'Nie moge odczytac stacji TuneIn: ' + str(serr))
         return
 
     def dodaj_tunein_outline(self, outline):
@@ -284,14 +284,14 @@ class Radia:
                         if a['key'] == 'stations':
                             lista_stacji = a
                             break
-                except IndexError:
-                    self.logger.warning('Brak sekcji body: ' + str(js))
+                except Exception:
+                    self.logger.warning(self.obszar, 'Brak sekcji body: ' + str(js))
                 try:
                     self.dodaj_stacje_tunein_zjson(nazwa_grupy, lista_stacji['children'])
                 except KeyError as serr:
-                    self.logger.warning('Brak sekcji children ... ' + str(lista_stacji))
-            except requests.ConnectionError as serr:
-                self.logger.warning('Blad podczas odczytu z tunein.... Blad: ' + str(serr))
+                    self.logger.warning(self.obszar, 'Brak sekcji children ... ' + str(lista_stacji))
+            except Exception as serr:
+                self.logger.warning(self.obszar, 'Blad podczas odczytu z tunein.... Blad: ' + str(serr))
 
 
     def tunein_odczytaj_link_stacji(self, link):
@@ -302,7 +302,7 @@ class Radia:
             js = json.JSONDecoder().decode(result)
             link_stacji = js['body'][0]['url']
         except (urllib2.URLError, urllib2.HTTPError) as serr:
-            self.logger.warning('Blad podczas odczytu listy stacji tunein. Link: ' + link + ' Blad: ' + str(serr))
+            self.logger.warning(self.obszar, 'Blad podczas odczytu listy stacji tunein. Link: ' + link + ' Blad: ' + str(serr))
         return link_stacji
 
     def dodaj_stacje_polskieradio(self):
@@ -311,8 +311,8 @@ class Radia:
         try:
             #req = urllib2.urlopen(API_URL)
             result_object = requests.get(API_URL).json()
-        except requests.ConnectionError as serr:
-            self.logger.warning('Blad odczytu stacji Polskie Radio: ' + str(serr))
+        except Exception as serr:
+            self.logger.warning(self.obszar, 'Blad odczytu stacji Polskie Radio: ' + str(serr))
             return
         #result_object = json.loads(req.read())
         stacje = result_object["channel"]
@@ -337,7 +337,7 @@ class Radia:
             stacja = Radio(NAZWA_SERWISU_POLSKIERADIO, nazwa, id, link, logo, grupa)
             self.stacje_radiowe.append(stacja)
         #THutils.zapisz_do_logu_plik('I', 'Dodalem stacje Polskie Radio.')
-        self.logger.info('Dodalem stacje Polskie Radio.')
+        self.logger.info(self.obszar, 'Dodalem stacje Polskie Radio.')
         return
 
     def dodaj_stacje_rmf(self):
@@ -356,14 +356,15 @@ class Radia:
         #    self.logger.warning('Nie moge odczytac linku API_URL. Blad: ' + str(serr))
         #    return
             st_json = requests.get(API_URL).json()
-        except requests.ConnectionError as serr:
-            self.logger.warning('Blad odczytu z API RMF: ' + str(serr))
+        except Exception as serr:
+            self.logger.warning(self.obszar, 'Blad odczytu z API RMF: ' + str(serr))
         #result_object = self.odczytaj_xml(KATEGORIE)
         try:
+            #TODO wymienic url na requests
             req = urllib2.urlopen(KATEGORIE)
-        except (urllib2.URLError) as serr:
+        except urllib2.URLError as serr:
             #THutils.zapisz_do_logu_plik('E', 'Nie moge odczytac linku KATEGORIE. Blad: ' + str(serr))
-            self.logger.warning('Nie moge odczytac linku KATEGORIE. Blad: ' + str(serr))
+            self.logger.warning(self.obszar, 'Nie moge odczytac linku KATEGORIE. Blad: ' + str(serr))
             return
         result_object = xml.etree.ElementTree.parse(req).getroot()
         stacjex = result_object.find('stations')
@@ -386,7 +387,7 @@ class Radia:
             #self.dodaj_stacje(NAZWA_SERWISU_RMFFM, id_stacji, nazwa_stacji, link, LOGA_URL + idname + LOGA_SUFFIX, gr)
             stacja = Radio(NAZWA_SERWISU_RMFFM, nazwa_stacji, id_stacji, link, LOGA_URL + idname + LOGA_SUFFIX, gr)
             self.stacje_radiowe.append(stacja)
-        self.logger.info('Dodalem stacje RMF FM.')
+        self.logger.info(self.obszar, 'Dodalem stacje RMF FM.')
         return
 
     #TODO usunac wszystkie odwolania do urrlib2 i przejsc na request, w calym kodzie
@@ -396,14 +397,14 @@ class Radia:
         ts_konca = 0
 
         if id_stacji == '':
-            self.logger.warning('Nie moge odczytac aktualnie grane OpenFM bo ID_STACJI jest puste')
+            self.logger.warning(self.obszar, 'Nie moge odczytac aktualnie grane OpenFM bo ID_STACJI jest puste')
         else:
             URL_API = "https://open.fm/api/api-ext/v2/channels/short.json"
             zwrotka = {}
             try:
                 zwrotka = requests.get(URL_API).json()
-            except requests.ConnectionError:
-                self.logger.warning('Blad odczytu z API Open FM')
+            except Exception:
+                self.logger.warning(self.obszar, 'Blad odczytu z API Open FM')
 
             try:
                 lista_kanalow = zwrotka['channels']
@@ -417,9 +418,9 @@ class Radia:
 
 
             except KeyError as serr:
-                self.logger.warning('Problem przy odczycie co grane Open FM: ' + str(serr))
+                self.logger.warning(self.obszar, 'Problem przy odczycie co grane Open FM: ' + str(serr))
             # zwraca artyste, album, tytul oraz timestamp konca
-            self.logger.info('Odczytalem OPen FM co grane: ' + str(artysta) + ', ' + str(album) + ', ' + str(tytul)
+            self.logger.info(self.obszar, 'Odczytalem OPen FM co grane: ' + str(artysta) + ', ' + str(album) + ', ' + str(tytul)
                              + ', ' + str(ts_konca))
         return artysta, album, tytul, ts_konca
 
@@ -430,8 +431,8 @@ class Radia:
         PLAY_URL = "http://stream.open.fm/"
         try:
             result_object = requests.get(API_URL).json()
-        except requests.ConnectionError as serr:
-            self.logger.warning('Blad odczytu z API Open FM: ' + str(serr))
+        except Exception as serr:
+            self.logger.warning(self.obszar, 'Blad odczytu z API Open FM: ' + str(serr))
             return
         stacje = result_object["channels"]
 
@@ -462,5 +463,5 @@ class Radia:
 
             #self.dodaj_stacje(NAZWA_SERWISU_OPENFM, a['id'], a['name'], PLAY_URL+a['id'], logo_url , nazwa_grupy)
         #THutils.zapisz_do_logu_plik('I', 'Dodalem stacje OpenFM.')
-        self.logger.info('Dodalem stacje OpenFM.')
+        self.logger.info(self.obszar, 'Dodalem stacje OpenFM.')
         return

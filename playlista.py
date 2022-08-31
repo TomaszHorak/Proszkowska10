@@ -3,7 +3,7 @@ import urlparse
 import os
 import json
 from random import randint
-import logging
+from MojLogger import MojLogger
 import datetime
 from threading import Lock
 import sys
@@ -93,8 +93,9 @@ class PozycjaPlaylisty:
         return pozycja
 
 class Playlista(object):
-    def __init__(self, nazwa='', jak_odtwarza=PO_KOLEI, przy_starcie=False, plik=''):
-        self.logger = logging.getLogger(constants.NAZWA_LOGGERA)
+    def __init__(self, obszar, logger, nazwa='', jak_odtwarza=PO_KOLEI, przy_starcie=False, plik=''):
+        self.obszar = obszar
+        self.logger = logger    #type: MojLogger
         self.nazwa = nazwa
         self.pozycje = []
         self.jak_odtwarza = jak_odtwarza
@@ -102,8 +103,8 @@ class Playlista(object):
         self.katalog_ulubionych = constants.KATALOG_ULUBIONYCH
         self.nazwa_pliku_z_aktualna_playlista = os.getenv(constants.KATALOG_GLOWNY) + '/' + NAZWA_PLIKU_AKTUALNA_PLAYLISTA
         self.nazwa_pliku_z_historia = os.getenv(constants.KATALOG_GLOWNY) + '/' + NAZWA_PLIKU_HISTORIA
-        self.ts = int(time.time())
-        self.ts_historii = int(time.time())
+        self.ts = time.time()*1000
+        self.ts_historii = time.time()*1000
         self.lock_aktualizacji = Lock()
         if przy_starcie:
             self.inicjalizuj_playliste_z_pliku(self.nazwa_pliku_z_aktualna_playlista)
@@ -118,7 +119,7 @@ class Playlista(object):
         try:
             poz = json.load(open(self.nazwa_pliku_z_historia, 'r'))
         except Exception as serr:
-            self.logger.warning('Blad odczytu pliku z historia, blad JSON: ' + str(serr))
+            self.logger.warning(self.obszar, 'Blad odczytu pliku z historia, blad JSON: ' + str(serr))
             return None
         return poz
 
@@ -148,9 +149,8 @@ class Playlista(object):
             plik.close()
             # self.logger.info('Zapisalem historie w pliku.')
         except Exception as serr:
-            self.logger.warning(
-                'Nie moglem zapisac historii w pliku. Blad: ' + str(serr))
-        self.ts_historii = int(time.time())
+            self.logger.warning(self.obszar, 'Nie moglem zapisac historii w pliku. Blad: ' + str(serr))
+        self.ts_historii = time.time()*1000
         return
 
     def dodaj_z_linku(self, link, fanartlink, zmien_nazwe=False):
@@ -170,7 +170,7 @@ class Playlista(object):
         self.zapisz_playliste()
 
     def dodaj_z_linku_spotify(self, link, zmien_nazwe=False):
-        spot = spotify_klasa.SpotifyKlasa(self.logger)
+        spot = spotify_klasa.SpotifyKlasa(self.logger, self.obszar)
         poz = link.rfind('/') + 1
         sub = link[poz:]
         id = sub[0:22]
@@ -185,7 +185,7 @@ class Playlista(object):
                     self.__dodaj_do_playlisty_spotify_track(a)
                 nazwa_playlisty = se['tracks'][0]['artists'][0]['name']
             except (IndexError, KeyError, TypeError) as serr:
-                self.logger.warning("Blad dodania playlisty z artysty: " + str(serr))
+                self.logger.warning(self.obszar, "Blad dodania playlisty z artysty: " + str(serr))
         elif ("open.spotify.com/playlist" in link) or ("spotify:playlist" in link):
             playlista = spot.zapytanie('playlist', id, dodatek)
             self.__dodaj_do_playlisty_spotify_playlist(playlista)
@@ -219,7 +219,6 @@ class Playlista(object):
         return nazwa_playlisty
 
     def __dodaj_do_playlisty_spotify_playlist(self, playlista):
-        pl = []
         try:
             if 'tracks' in playlista:
                 pl = playlista['tracks']['items']
@@ -228,7 +227,7 @@ class Playlista(object):
             for a in pl:
                 self.__dodaj_do_playlisty_spotify_track(a['track'])
         except (KeyError, TypeError) as serr:
-            self.logger.warning("Blad dodania pozycji playlisty spotify: " + str(serr))
+            self.logger.warning(self.obszar, "Blad dodania pozycji playlisty spotify: " + str(serr))
 
     def __dodaj_do_playlisty_spotify_album(self, album):
         album_name = album['name']
@@ -249,17 +248,17 @@ class Playlista(object):
         try:
             fanart = track[constants.ALBUM]['images'][0]['url']
         except (IndexError, KeyError) as serr:
-            self.logger.warning('Brak obrazu dla track: ' + str(track))
+            self.logger.warning(self.obszar, 'Brak obrazu dla track: ' + str(track))
         artist = ''
         try:
             artist = track['artists'][0]['name']
         except (IndexError, KeyError) as serr:
-            self.logger.warning('Brak artysty dla track: ' + str(track))
+            self.logger.warning(self.obszar, 'Brak artysty dla track: ' + str(track))
         album = ''
         try:
             album = track[constants.ALBUM]['name']
         except (IndexError, KeyError, TypeError) as serr:
-            self.logger.warning('Brak albumu dla track: ' + str(track))
+            self.logger.warning(self.obszar, 'Brak albumu dla track: ' + str(track))
         self.dodaj_pozycje_z_polami(artist=artist,
                                     album=album,
                                     title=track['name'],
@@ -273,17 +272,17 @@ class Playlista(object):
     # noinspection PyProtectedMember
     def dodaj_z_linku_youtube(self, link):
         try:
-            self.logger.info('Rozwijam z linku youtube: ' + link)
+            self.logger.info(self.obszar, 'Rozwijam z linku youtube: ' + link)
             video = pafy.new(link)
             bestaudio = video.getbestaudio()
             if video.bigthumbhd != '':
                 fanart = video.bigthumbhd
             else:
                 fanart = video.bigthumb
-            self.logger.info('Zakonczylem rozwijanie z linku youtube: ' + link)
+            self.logger.info(self.obszar, 'Zakonczylem rozwijanie z linku youtube: ' + link)
             dostepny = True
         except (ValueError, IOError, RuntimeError) as serr:
-            self.logger.warning('Pafy blad: ' + str(serr) + ' Link: ' + link)
+            self.logger.warning(self.obszar, 'Pafy blad: ' + str(serr) + ' Link: ' + link)
             return ''
         autorx = video._author
         if dostepny:
@@ -304,7 +303,7 @@ class Playlista(object):
         try:
             lista = pafy.get_playlist(l2)
         except (ValueError, IOError, RuntimeError) as serr:
-            self.logger.warning('Playlista youtube niedostepna, link: ' + link + ' Blad: ' + str(serr))
+            self.logger.warning(self.obszar, 'Playlista youtube niedostepna, link: ' + link + ' Blad: ' + str(serr))
             return ''
         # TODO dorobic pobieranie nazwy
         nazwa = ''
@@ -323,7 +322,7 @@ class Playlista(object):
             return RODZAJ_LINKU_SPOTIFY
         if "spotify:" in link:
             return RODZAJ_LINKU_SPOTIFY
-        self.logger.warning("Przyszedl link, ktory nie jest ani playlista ani video: " + str(link))
+        self.logger.warning(self.obszar, "Przyszedl link, ktory nie jest ani playlista ani video: " + str(link))
         return RODZAJ_LINKU_INNE
 
     def inicjalizuj_playliste_z_pliku(self, nazwa_pliku, zeruj=True):
@@ -333,7 +332,7 @@ class Playlista(object):
             try:
                 pl = json.load(open(nazwa_pliku, 'r'))
             except Exception as serr:
-                self.logger.warning('Blad inicjalizowanie playlisty z pliku: ' + nazwa_pliku +
+                self.logger.warning(self.obszar, 'Blad inicjalizowanie playlisty z pliku: ' + nazwa_pliku +
                                     ', blad JSON: ' + str(serr))
                 return
 
@@ -348,7 +347,7 @@ class Playlista(object):
             for p in pl[constants.POZYCJE]:
                 self.pozycje.append(self.pozycja_z_json(p))
         except (Exception, IOError) as ser:
-            self.logger.warning('Blad przy dodawaniu do playlisty z pliku: ' + nazwa_pliku + '. Kod bledu: ' + str(ser))
+            self.logger.warning(self.obszar, 'Blad przy dodawaniu do playlisty z pliku: ' + nazwa_pliku + '. Kod bledu: ' + str(ser))
             return
 
     def pozycja_z_json(self, p):
@@ -422,7 +421,7 @@ class Playlista(object):
     def zapisz_playliste_w_ulubionych(self, nazwa_ulubionego):
         # uwaga ! ta funkcja jest uruchamiana w osobnym watku
         # nazwa_ulubionego oznacza nazwe ulubionego do ktorego pliki trzeba sciagnac
-        self.logger.info('Rozpoczynam zapisywanie w ulubionych: ' + nazwa_ulubionego)
+        self.logger.info(self.obszar, 'Rozpoczynam zapisywanie w ulubionych: ' + nazwa_ulubionego)
         usun_pliki = False
         for a in self.pozycje:
             if a.typ == TYP_YOUTUBE:
@@ -434,9 +433,9 @@ class Playlista(object):
                 if not os.path.isdir(nazwa_katalogu):
                     try:
                         os.mkdir(nazwa_katalogu)
-                        self.logger.info('Stworzylem katalog na sciaganie plikow z youtube: ' + nazwa_ulubionego)
+                        self.logger.info(self.obszar, 'Stworzylem katalog na sciaganie plikow z youtube: ' + nazwa_ulubionego)
                     except OSError as serr:
-                        self.logger.warning('Blad tworzenia katalogu na ulubiony: ' + str(serr))
+                        self.logger.warning(self.obszar, 'Blad tworzenia katalogu na ulubiony: ' + str(serr))
                 try:
                     video = pafy.new(a.link_youtube)
                     bestaudiox = video.getbestaudio()
@@ -446,10 +445,10 @@ class Playlista(object):
                     a.link = docelowa_nazwa_pliku
                     if not os.path.isfile(docelowa_nazwa_pliku):
                         bestaudiox.download(docelowa_nazwa_pliku, quiet=True)
-                        self.logger.info('Sciagnalem plik: ' + str(docelowa_nazwa_pliku))
+                        self.logger.info(self.obszar, 'Sciagnalem plik: ' + str(docelowa_nazwa_pliku))
                 # except (ValueError, IOError, RuntimeError, RuntimeError) as serr:
                 except Exception:
-                    self.logger.warning('Video niedostepne, link: ' + a.link + ' Blad: ' + str(sys.exc_info()[0]))
+                    self.logger.warning(self.obszar, 'Video niedostepne, link: ' + a.link + ' Blad: ' + str(sys.exc_info()[0]))
                     continue
         self.zapisz_playliste(nazwa=nazwa_ulubionego)
 
@@ -475,11 +474,11 @@ class Playlista(object):
                         os.remove(f)
                     except OSError:
                         self.logger.warning('Nie moge usunac pliku: ' + str(f))"""
-        self.logger.info('Zakonczylem zapisywanie w ulubionych: ' + nazwa_ulubionego)
+        self.logger.info(self.obszar, 'Zakonczylem zapisywanie w ulubionych: ' + nazwa_ulubionego)
         return
 
     def zapisz_playliste(self, nazwa=''):
-        self.ts = int(time.time())
+        self.ts = time.time()*1000
         if self.liczba_pozycji() == 0:
             return
         dane = deepcopy(self.wyslij_playliste())
@@ -495,26 +494,23 @@ class Playlista(object):
             plik.close()
             # self.logger.info('Zapisalem playliste w pliku: ' + nazwa_pliku)
         except [IOError, SystemError] as serr:
-            self.logger.warning(
+            self.logger.warning(self.obszar,
                 'Nie moglem zapisac playlisty w pliku, nazwa playlisty: ' + nazwa_pliku + ' Blad: ' + str(serr))
             return
         return
 
     def wyslij_playliste(self, pelna=True):
-        dane = {}
+        dane = {'Naglowek': {constants.NAZWA: self.nazwa,
+                             JAK_ODTWARZA: self.jak_odtwarza,
+                             LICZBA_POZYCJI: int(self.liczba_pozycji()),
+                             'Numer_pozycji': int(self.nr_pozycji_na_playliscie),
+                             constants.TS: self.ts}}
         # TODO przeniesc do contants ponize hardcody
-        dane['Naglowek'] = {constants.NAZWA: self.nazwa,
-                            JAK_ODTWARZA: str(self.jak_odtwarza),
-                            LICZBA_POZYCJI: int(self.liczba_pozycji()),
-                            'Numer_pozycji': int(self.nr_pozycji_na_playliscie),
-                            constants.TS: self.ts}
         pozy = []
         # TODO czy nie dorobic do JSONa pojedynczej pozycji i potem skladac
         for p in self.pozycje:
             pozy.append(p.pozycja_do_listy(pelna=pelna))
         dane[constants.POZYCJE] = pozy
-        # return {constants.RODZAJ_KOMUNIKATU: constants.RODZAJ_KOMUNIKATU_PLAYLISTA,
-        #        constants.RESULT: dane}
         return dane
 
     def oblicz_kolejny_do_grania(self):
@@ -532,7 +528,7 @@ class Playlista(object):
         try:
             return self.pozycje[self.nr_pozycji_na_playliscie].link
         except IndexError as serr:
-            self.logger.warning('Odtwarzaj_z_playlisty, zly numer pozycji: ' + str(self.nr_pozycji_na_playliscie) +
+            self.logger.warning(self.obszar, 'Odtwarzaj_z_playlisty, zly numer pozycji: ' + str(self.nr_pozycji_na_playliscie) +
                                 ' --> dlugosc playlisty: ' + str(self.liczba_pozycji()) + ' blad: ' + str(serr))
         return ''
 
@@ -578,7 +574,7 @@ class Playlista(object):
         if self.liczba_pozycji() == 1:
             return True
         self.pozycje.pop(nr_pozycji)
-        self.logger.info("Usunalem z playlisty pozycje nr " + str(nr_pozycji))
+        self.logger.info(self.obszar, "Usunalem z playlisty pozycje nr " + str(nr_pozycji))
 
         if nr_pozycji == self.nr_pozycji_na_playliscie:
             self.nastepny()
