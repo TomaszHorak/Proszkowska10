@@ -25,9 +25,10 @@ class Firebasenotification:
 
         try:
             response = requests.post('https://fcm.googleapis.com/fcm/send', data=json.dumps(body), headers=parametry, timeout=15)
+            if response.status_code != 200:
+                    self.logger.error('firebase', 'Bledny kod powrotu z firebase po post: ' + str(response.status_code))
+            
         except Exception as serr:
             self.logger.error('firebase', 'Nie udalo sie wyslac firebase: ' + str(serr))
 
-	if response.status_code != 200:
-            self.logger.error('firebase', 'Bledny kod powrotu z firebase po post: ' + str(response.status_code))
 

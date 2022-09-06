@@ -100,7 +100,7 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
                     plik_logu = THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_P10,
                                                                        'PLIK_LOGU', None)
                     od = odczytaj_log(plik_logu, liczba_linii)
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], od)
+                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], od, constants.OBSZAR_STAT)
                 elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_LOG_TEMPERATURY:
                     if constants.POLE_LICZBA_LINII not in params:
                         liczba_linii = 100
@@ -109,11 +109,11 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
                     plik_logu = THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP,
                                                                        'plik_logu_temp', None)
                     od = odczytaj_log(plik_logu, liczba_linii)
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], od)
+                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], od, constants.OBSZAR_STAT)
                 elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_STAN_LOG_NAGLOSNIENIE:
                     na = THutils.przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_STRYCH_v2(),
                                                               constants.OBSZAR_STAT, logger, params)
-                    odp =  THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_LOG_NAGLOSNIENIE, na[constants.RESULT])
+                    odp =  THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_LOG_NAGLOSNIENIE, na[constants.RESULT], constants.OBSZAR_STAT)
                 elif params[constants.KOMENDA] == constants.KOMENDA_WYSYLANIE_FIREBASE:
                     if constants.POLE_STAN in params:
                         THutils.zapisz_parametr_konfiguracji(constants.OBSZAR_P10, 'wysylanie_firebase',
@@ -139,7 +139,7 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
                     else:
                         liczba_linii = int(params[constants.POLE_LICZBA_LINII])
                     od = odczytaj_log(plik_logu, liczba_linii)
-                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], od)
+                    odp = THutils.skonstruuj_odpowiedzV2OK(params[constants.KOMENDA], od, constants.OBSZAR_STAT)
                 else:
                     odp = naglosnienie.biezacy_stan.biezacy_stan_odpowiedzV2()
         return odp
@@ -184,7 +184,7 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
             if constants.RODZAJ_KOMUNIKATU in params: #tutaj procesujemy status z strychu
                 if params[constants.RODZAJ_KOMUNIKATU] == constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA:
                     status_naglosnienia = params[constants.RESULT]
-                    odp =  THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_LOG_NAGLOSNIENIE, params[constants.RESULT])
+                    odp =  THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_LOG_NAGLOSNIENIE, params[constants.RESULT], constants.OBSZAR_NAGL)
                     #logger.info("P10", 'mam rodzaj komunikatu ' + str(params))
                     #print ('mam rodzaj kom' + str(params))
             if constants.KOMENDA in params:
@@ -212,7 +212,7 @@ def wyslij_firebase_ze_statusem(rodzaj_komunikatu, dane):
         #TODO uwaga dane nie sa wysylane tylko 'blabla'
         #threading.Thread(target=notyfikacja_firebase.notify,
         #                 args=(THutils.skonstruuj_odpowiedzV2OK(rodzaj_komunikatu, "blabla"),)).start()
-        notyfikacja_firebase.notify(THutils.skonstruuj_odpowiedzV2OK(rodzaj_komunikatu, "blabla"))
+        notyfikacja_firebase.notify(THutils.skonstruuj_odpowiedzV2OK(rodzaj_komunikatu, "blabla", ''))
     if THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_P10, constants.LOGUJ_FIREBASE) in ['True', 'true', 'TRUE']:
         logger.info(constants.OBSZAR_P10, 'Wyslalem firebase ' + str(rodzaj_komunikatu) + ': ' + str(dane))
     return
@@ -249,7 +249,7 @@ def wyslij_status_skrocony():
                    constants.POLE_TIMESTAMP_SZAKCJI: szybkieAkcje.get_ts(),
                    constants.POLE_TIMESTAMP_OGRZEWANIA: ogrzewanie.get_ts(),
                    constants.POLE_TIMESTAMP_SAUNY: sauna.get_ts()}
-    return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STATUS_SKROCONY, stat_prosty)
+    return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STATUS_SKROCONY, stat_prosty, constants.OBSZAR_STAT)
 
 def odczytaj_log(plik_logu, liczba_wierszy):
     zawartosc_log = THutils.odczytaj_log_plik(plik_logu, int(liczba_wierszy))
@@ -299,7 +299,7 @@ if moje_ip == os.getenv(constants.IP_GARAZ):
     status_naglosnienia = THutils.zapytaj_o_status_zdalnie(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_NAGL, constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA, logger)
     #status_wzmacniaczy = THutils.zapytaj_o_status_zdalnie(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_STAT, constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE, logger)
     oswietlenie = Oswietlenie(wewy, petla, logger, firebase_callback=wyslij_firebase_ze_statusem)
-    temper = Temperatura(wewy, petla, logger_temp,firebase_callback=wyslij_firebase_ze_statusem)
+    temper = Temperatura(wewy, petla, logger, logger_temp,firebase_callback=wyslij_firebase_ze_statusem)
     podlewaj = podlewanie.Podlewanie(wewy, petla, logger, firebase_callback=wyslij_firebase_ze_statusem)
     sterowanie = sterowanie.Sterowanie(wewy, petla, logger, firebase_callback=wyslij_firebase_ze_statusem)
     sauna = sauna.Sauna(logger, petla=petla, firebase_callback=wyslij_firebase_ze_statusem)

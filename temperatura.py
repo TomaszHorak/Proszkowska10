@@ -7,18 +7,12 @@ from THutils import odczytaj_parametr_konfiguracji
 from THutils import zapisz_temp_w_logu
 
 import time
-#import datetime
 import atexit
-#import DHT22
 import pigpio
 import MySQLdb
 import THutils
 import os
-#import json
-#import firebasenotification
-#import thread
 from MojLogger import MojLogger
-#import przekazniki_BCM
 from Obszar import Obszar
 from copy import deepcopy
 
@@ -36,6 +30,7 @@ class Temperatura(Obszar):
                  wewy,  # type: wejsciawyjscia.WejsciaWyjscia
                  petla,  # type: petlaczasowa.PetlaCzasowa
                  logger,    #type: MojLogger
+                 logger_temperatury,    #type: MojLogger
                  firebase_callback=None):
 
         Obszar.__init__(self, constants.OBSZAR_TEMP,
@@ -60,7 +55,7 @@ class Temperatura(Obszar):
         self.wilg_gleby = 0
         self.nr_pinu = 4 #pozniej w konfiguracji jest odczytywana wartosc z pliku
         #TODO nr pinu ujednolicic jest w self i dalej dodawany przekanik, nie potrzeba w self
-        self.log_temp = logger
+        self.log_temp = logger_temperatury
         # odstep w godzinach co ile ma byc odswiezana konfiguracja z bazy
         # self.czas_odczytu_konfig = 24
         self.odczytaj_konf()
@@ -75,10 +70,8 @@ class Temperatura(Obszar):
         if nazwa == NAZWA_CYKLU_ODCZYTUJ_TEMPERATURE:
             if stan:
                 self.__odczytaj_temp_i_loguj()
-
-                #self.logger.info('Odczytywanie temparatury sterowane z petli')
-        #self.logger.info('Temperatura: dzialanie na zasialniu etmperatury: ' + nazwa +
-        #                 ' ' + str(stan))
+                #self.logger.info(self.obszar,'Odczytywanie temparatury sterowane z petli')
+                #self.logger.info(self.obszar,'Temperatura: dzialanie na zasialniu etmperatury')
         #if tylko_aktualizuj_ts:
         #    self.resetuj_ts()
 
@@ -99,20 +92,12 @@ class Temperatura(Obszar):
         #self.czas_odczytu_konfig = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODCZYTU_KONFIG', self.logger))
         self.logger.info(self.obszar, 'Odczytalem konfiguracje temperatura.')
 
-    def __resetuj_czujniki_temperatury_cyklicznie(self):
+    '''def __resetuj_czujniki_temperatury_cyklicznie(self):
         #czas_odlaczania_czujnikow = int(odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'CZAS_ODLACZANIA_CZUJNIKOW')) * 60
         # TODO z jakichs powodow nie odczytuje poprawnie powyzszego parametru z konfiguracji
         czas_odlaczania_czujnikow = 38 * 60
         threading.Timer(czas_odlaczania_czujnikow, self.__resetuj_czujniki_temperatury_cyklicznie, []).start()
-        #self.__resetuj_czujniki_temperatury()
-
-    def __resetuj_czujniki_temperatury(self):
-        pass
-        # odlacza na 5 sekund czujniki temperatury, zasilanie
-#        self.wewy.wyjscia.ustaw_przekaznik_nazwa(self.nazwa_przek, True)
-    #    time.sleep(2)
-   #     self.wewy.wyjscia.ustaw_przekaznik_nazwa(self.nazwa_przek, False)
-
+        #self.__resetuj_czujniki_temperatury()'''
 
     '''def __zapisz_temp_do_bazy(self):
         try:

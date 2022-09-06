@@ -19,6 +19,8 @@ class PetlaCzasowa:
         self._tabela = []
         self._petla_w_trakcie_przebiegu = threading.Lock()  # jesli tru to blokuj dodawanie
         self._odczytaj_cykle_z_konfiguracji()
+        # self._odczytaj_cykle_z_konfiguracji_cyklicznie()
+        # self._petlaStart()
 
     def rejestruj_dzialanie(self, obszar, dzialanie):
         for a in self._tabela:
@@ -34,8 +36,8 @@ class PetlaCzasowa:
         return None
 
     def __interwalowy_dzialaj(self, a ):
-        teraz = time.time()*1000
-        roznica_czasu = (teraz - a._ts_zalaczenia_interwalu)/1000
+        teraz = int(time.time())
+        roznica_czasu = teraz - a._ts_zalaczenia_interwalu
 
         if a.get_stan():
             if roznica_czasu >= a.get_czas_zalaczenia_w_interwalowym():
@@ -69,7 +71,7 @@ class PetlaCzasowa:
                         if a.get_czy_jednorazowy():
                             #TODO sprawdzi kiedy_koniec czy na pewno obsluguje tsstart i stop i godziny
                             #TODO statla typ jednorazwoy permanty do usuniecia
-                            if a.get_kiedy_koniec() <= time.time()*1000:
+                            if a.get_kiedy_koniec() <= int(time.time()):
                                 self._usun_z_tabeli_nazwa_jednorazzowy_w_przebiegu(a.get_nazwa())
                         if a.get_stan():
                             a._dzialaj_na_pozycji(False)
@@ -373,8 +375,9 @@ class PozycjaPetli:
         # akt - 1 aktywne (mozna wlaczac/wylacza), 0 - deaktywowane
         self._nazwa = nazwa
         self._obszar = obszar
+        #self._typ = typ  # typ - J jednorazowe, P permanentne
         self._dzialanie = dzialanie
-        self._ts = time.time()*1000
+        self._ts = int(time.time())
         self._ts_start = ts_start  # ts_start i stop sa uzywane jako jednorazowy, czyli jesli wartosc <>0 to znaczy ze jednorazowy i usuwac
         self._ts_stop = ts_stop
         self._wartosc = wartosc
@@ -400,7 +403,7 @@ class PozycjaPetli:
         return
 
     def resetuj_ts(self):
-        self._ts = time.time()*1000
+        self._ts = int(time.time())
 
     def rejestruj_dzialanie(self, dzialanie):
         self._dzialanie = dzialanie
@@ -481,7 +484,6 @@ class PozycjaPetli:
                 # self._kiedy_koniec = gstop.timestamp()   #(gstop - t).total_seconds()
                 self._kiedy_koniec = (gstop - datetime.datetime(1970, 1,
                                                                 1)).total_seconds()  # TODO po przejsciu na pyt 3 dodac tmestamp
-                #self._kiedy_koniec = gstop - time.time()*1000 
                 # TODO obliczenie pozostalego czasu tylko raz przy starcie, nie aktualizuejmy ts juz wiecej
                 return True
             else:
@@ -489,7 +491,7 @@ class PozycjaPetli:
                 return False
         else:  # przypadek kiedy mamy cykl jednorazowy od ts do ts
             # TODO zaktualizowac kedy koniec, nawet w przypadku jednorazowego, ale bez aktualizowania tsa
-            t = time.time()*1000
+            t = int(time.time())
             self._kiedy_koniec = self._ts_stop  # - t
             if t >= self._ts_start:
                 if t <= self._ts_stop:
