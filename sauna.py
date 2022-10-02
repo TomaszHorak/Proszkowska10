@@ -30,13 +30,13 @@ class Sauna(Obszar):
         rodzaj = Obszar.procesuj_polecenie(self, **params)
 
         if rodzaj == constants.KOMENDA: #jest polecenie do przekazania do sauny
-            odp = przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_SAUNA(), constants.OBSZAR_SAUNA, self.logger, params)
-            #if params[constants.KOMENDA] != constants.RODZAJ_KOMUNIKATU_STAN_SAUNY:
-            #    self.logger.info('Przekazalem do sauny: ' + str(params))
-            try:
-                self.procesuj_status_z_sauny(odp[constants.RESULT])
-            except KeyError as serr:
-                self.logger.error(self.obszar, 'Brak poprawnej zwrotki z sauny: ' + str(serr))
+            if params[constants.KOMENDA] != constants.RODZAJ_KOMUNIKATU_STAN_SAUNY:
+                #self.logger.info('Przekazalem do sauny: ' + str(params))
+                odp = przekaz_polecenie_V2_JSONRPC(constants.get_HOST_I_PORT_SAUNA(), constants.OBSZAR_SAUNA, self.logger, params)
+                try:
+                    self.procesuj_status_z_sauny(odp[constants.RESULT])
+                except KeyError as serr:
+                    self.logger.error(self.obszar, 'Brak poprawnej zwrotki z sauny: ' + str(serr))
         elif rodzaj == constants.RODZAJ_KOMUNIKATU:   #mamy zwrotke z sauny na zasadzie push
             if params[constants.RODZAJ_KOMUNIKATU] == constants.RODZAJ_KOMUNIKATU_STAN_SAUNY:
                 try:
