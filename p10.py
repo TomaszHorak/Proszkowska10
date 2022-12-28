@@ -1,5 +1,7 @@
 #!/usr/bin/python
 from __future__ import print_function
+
+import time
 import THutils
 import constants
 import os
@@ -212,9 +214,17 @@ def wyslij_firebase_ze_statusem(rodzaj_komunikatu, dane):
         #TODO uwaga dane nie sa wysylane tylko 'blabla'
         #threading.Thread(target=notyfikacja_firebase.notify,
         #                 args=(THutils.skonstruuj_odpowiedzV2OK(rodzaj_komunikatu, "blabla"),)).start()
-        notyfikacja_firebase.notify(THutils.skonstruuj_odpowiedzV2OK(rodzaj_komunikatu, "blabla", ''))
-    if THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_P10, constants.LOGUJ_FIREBASE) in ['True', 'true', 'TRUE']:
-        logger.info(constants.OBSZAR_P10, 'Wyslalem firebase ' + str(rodzaj_komunikatu) + ': ' + str(dane))
+        #notyfikacja_firebase.notify(THutils.skonstruuj_odpowiedzV2OK(rodzaj_komunikatu, "blabla", ''))
+        #sprawdzamy, ktory TS jest najnowszy i go wysylamy
+        #global najnowszy_ts
+        statpr = generuj_stat_prosty()
+        if THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_P10, constants.LOGUJ_FIREBASE) in ['True', 'true',
+                                                                                                      'TRUE']:
+            # logger.info(constants.OBSZAR_P10, 'Wyslalem firebase ' + str(rodzaj_komunikatu) + ': ' + str(dane))
+            logger.info(constants.OBSZAR_P10, 'Wyslalem firebase ' + str(statpr))
+        #notyfikacja_firebase.notify(najnowszy_ts)
+        notyfikacja_firebase.notify(statpr)
+
     return
 
 # ---------------------------------------------
@@ -225,6 +235,10 @@ def wyslij_firebase_ze_statusem(rodzaj_komunikatu, dane):
 #                                          constants.STATUS_OK)
 
 def wyslij_status_skrocony():
+
+    return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STATUS_SKROCONY, generuj_stat_prosty(), constants.OBSZAR_STAT)
+
+def generuj_stat_prosty():
     tsnagl = tsradii = tsplaylisty = tsulub = tshistorii = tswzmac = 0
     try:
         tsnagl = status_naglosnienia[constants.POLE_TIMESTAMP_NAGLOSNIENIA]
@@ -234,8 +248,9 @@ def wyslij_status_skrocony():
         tsulub = status_naglosnienia[constants.POLE_TIMESTAMP_ULUBIONYCH]
         tswzmac = status_naglosnienia[constants.POLE_TIMESTAMP_WZMACNIACZY]
     except (KeyError, TypeError) as serr:
-        logger.warning(constants.OBSZAR_P10, 'Nie moge odczytac statusu z naglosnienia, zmienna nie ustawiona: ' + str(serr))
-        
+        logger.warning(constants.OBSZAR_P10,
+                       'Nie moge odczytac statusu z naglosnienia, zmienna nie ustawiona: ' + str(serr))
+
     stat_prosty = {constants.POLE_TIMESTAMP_NAGLOSNIENIA: tsnagl,
                    constants.POLE_TIMESTAMP_RADII: tsradii,
                    constants.POLE_TIMESTAMP_ULUBIONYCH: tsulub,
@@ -249,7 +264,33 @@ def wyslij_status_skrocony():
                    constants.POLE_TIMESTAMP_SZAKCJI: szybkieAkcje.get_ts(),
                    constants.POLE_TIMESTAMP_OGRZEWANIA: ogrzewanie.get_ts(),
                    constants.POLE_TIMESTAMP_SAUNY: sauna.get_ts()}
-    return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STATUS_SKROCONY, stat_prosty, constants.OBSZAR_STAT)
+    # global najnowszy_ts
+    najnowszy_ts = tsnagl
+    if tsradii > najnowszy_ts:
+        najnowszy_ts = tsradii
+    if tsulub > najnowszy_ts:
+        najnowszy_ts = tsulub
+    if tshistorii > najnowszy_ts:
+        najnowszy_ts = tshistorii
+    if tsplaylisty > najnowszy_ts:
+        najnowszy_ts = tsplaylisty
+    if podlewaj.get_ts() > najnowszy_ts:
+        najnowszy_ts = podlewaj.get_ts()
+    if sterowanie.get_ts() > najnowszy_ts:
+        najnowszy_ts = sterowanie.get_ts()
+    if temper.get_ts() > najnowszy_ts:
+        najnowszy_ts = temper.get_ts()
+    if oswietlenie.get_ts() > najnowszy_ts:
+        najnowszy_ts = oswietlenie.get_ts()
+    if tswzmac > najnowszy_ts:
+        najnowszy_ts = tswzmac
+    if szybkieAkcje.get_ts() > najnowszy_ts:
+        najnowszy_ts = szybkieAkcje.get_ts()
+    if ogrzewanie.get_ts() > najnowszy_ts:
+        najnowszy_ts = ogrzewanie.get_ts()
+    if sauna.get_ts() > najnowszy_ts:
+        najnowszy_ts = sauna.get_ts()
+    return stat_prosty
 
 def odczytaj_log(plik_logu, liczba_wierszy):
     zawartosc_log = THutils.odczytaj_log_plik(plik_logu, int(liczba_wierszy))
@@ -292,10 +333,11 @@ if moje_ip == os.getenv(constants.IP_GARAZ):
 
     logger_temp = MojLogger(constants.NAZWA_LOGGERA_TEMPERATUR,
                             THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_TEMP, 'plik_logu_temp', None))
-
+    najnowszy_ts = time.time() * 1000
     notyfikacja_firebase = firebasenotification.Firebasenotification(logger)
     wewy = wejsciawyjscia.WejsciaWyjscia(logger, wejsca=True, wyjscia=True)
     petla = petlaczasowa.PetlaCzasowa(logger)
+
     status_naglosnienia = THutils.zapytaj_o_status_zdalnie(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_NAGL, constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA, logger)
     #status_wzmacniaczy = THutils.zapytaj_o_status_zdalnie(constants.get_HOST_I_PORT_STRYCH_v2(), constants.OBSZAR_STAT, constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE, logger)
     oswietlenie = Oswietlenie(wewy, petla, logger, firebase_callback=wyslij_firebase_ze_statusem)
@@ -304,7 +346,11 @@ if moje_ip == os.getenv(constants.IP_GARAZ):
     sterowanie = sterowanie.Sterowanie(wewy, petla, logger, firebase_callback=wyslij_firebase_ze_statusem)
     sauna = sauna.Sauna(logger, petla=petla, firebase_callback=wyslij_firebase_ze_statusem)
     ogrzewanie = Ogrzewanie(wewy, petla, logger, logger_temp)
+
     szybkieAkcje = Szybkie_Akcje(logger)
+
+    #startujemy przetwarzanei w obszarach
+    temper.start()
     petla.petlaStart()
 else:
     import naglosnienie
