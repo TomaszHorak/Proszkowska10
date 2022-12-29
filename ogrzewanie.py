@@ -12,7 +12,7 @@ DEFAULT_TEMP_MIN = 17.0
 DEFAULT_TEMP_MAX = 25.0
 CZAS_OPOZNIENIA_PRZYJMOWANIA_01_STOPNIA = 30*60  # w sekundach
 HISTEREZA = 0.5
-CZAS_DO_ALARMU = 50*60 #liczba sekund bez zmiany stanu temp do podniesienia alarmu
+CZAS_DO_ALARMU = 150*60 #liczba sekund bez zmiany stanu temp do podniesienia alarmu
 
 OGRZ_ZOSIA = 'ogrz_zosia'
 OGRZ_ZOSIA_PIN = 17
@@ -59,9 +59,6 @@ ustawia tryb wakacje
 POLE_WAKACJE = json z definicja wakacji
 '''
 
-
-
-
 class Ogrzewanie(Obszar):
     def __init__(self, wewy, petla, logger, log_temp):
         Obszar.__init__(self, constants.OBSZAR_OGRZ,
@@ -90,7 +87,7 @@ class Ogrzewanie(Obszar):
         if not self.__max_temp_pomieszczenia:
             self.__max_temp_pomieszczenia = DEFAULT_TEMP_MAX
 
-        ogrzakt = bool(odczytaj_parametr_konfiguracji(self.obszar, constants.OGRZEWANIE_AKTYWNE, self.logger))
+        ogrzakt = odczytaj_parametr_konfiguracji(self.obszar, constants.OGRZEWANIE_AKTYWNE, self.logger)
         self.__ogrzewanie_aktywne = False
         if ogrzakt in ['True', 'true', 'TRUE']:
             self.__ogrzewanie_aktywne = True
@@ -99,11 +96,13 @@ class Ogrzewanie(Obszar):
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_ZOSIA, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
                                           czas_do_alarmu=self.__czas_do_alarmu, logger=self.logger))
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_SALON, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
-                                          czas_do_alarmu=self.__czas_do_alarmu, logger=self.logger))
+                                          czas_do_alarmu=self.__czas_do_alarmu,
+                                          logger=self.logger, korekta_temperatury=-1.2))
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_STROZOWKA, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
                                           czas_do_alarmu=self.__czas_do_alarmu, logger=self.logger))
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_PIOTREK, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
-                                          czas_do_alarmu=self.__czas_do_alarmu, logger=self.logger))
+                                          czas_do_alarmu=self.__czas_do_alarmu,
+                                          logger=self.logger, korekta_temperatury=-0.8))
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_GARAZ, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
                                           czas_do_alarmu=self.__czas_do_alarmu, logger=self.logger))
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_SYPIALNIA, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
@@ -140,15 +139,15 @@ class Ogrzewanie(Obszar):
                 for j in self._tabela:  # type: Pomieszczenie
                     self.petla.aktywuj_pozycje_nazwa(self.obszar, j.get_nazwa(), False)
                     j.zadaj_temp(j.get_temp_min())
-                self.logger.info(self.obszar, 'Uruchamiam wakacje')
+                self.logger.info(self.obszar, 'wakacje', 'Uruchamiam wakacje')
                 self.wakacje_trwaja = True
             else:
                 for j in self._tabela:  # type: Pomieszczenie
                     self.petla.aktywuj_pozycje_nazwa(self.obszar, j.get_nazwa(), True)
-                self.logger.info(self.obszar, 'Koniec wakacji')
+                self.logger.info(self.obszar, 'wakacje', 'Koniec wakacji')
                 self.wakacje_trwaja = False
                 self.wakacje_zaplanowane = False
-            self.logger.info(self.obszar, 'Resetuje TS w dzialanie petli WAKACJE')
+            self.logger.info(self.obszar, 'wakacje', 'Resetuje TS w dzialanie petli WAKACJE')
             self.resetuj_ts()
             return
         if nazwa == PETLA_STERUJ_CYKLICZNIE:
@@ -158,10 +157,11 @@ class Ogrzewanie(Obszar):
         if stan:
             #czyli trzeba ustawic temperature
             pom = self.pomieszczenie_po_nazwie(nazwa)   # type: Pomieszczenie
-            pom.zadaj_temp(pozycjapetli.get_wartosc())
-            pom.doczasu = str(pozycjapetli.do_ktorej_godziny())
-            pom.odczasu = str(pozycjapetli.od_ktorej_godziny())
-            self.logger.info(self.obszar, 'Zadalem temperature ' + str(nazwa) + ' na ' + str(pozycjapetli.get_wartosc()))
+            if pom:
+                pom.zadaj_temp(pozycjapetli.get_wartosc())
+                pom.doczasu = str(pozycjapetli.do_ktorej_godziny())
+                pom.odczasu = str(pozycjapetli.od_ktorej_godziny())
+                self.logger.info(self.obszar, str(nazwa), 'Zadalem temperature na ' + str(pozycjapetli.get_wartosc()))
 
     def steruj_cyklicznie(self, stan):
         #funckja ma byc wywolywana z petli, o nazwie 'steruj_cyklicznie'
@@ -175,13 +175,13 @@ class Ogrzewanie(Obszar):
             if a.steruj(histereza=self.__histereza):
                 if not self.wewy.wyjscia.stan_przekaznika_nazwa(a.get_nazwa()):
                     self.wewy.wyjscia.ustaw_przekaznik_nazwa(a.get_nazwa(), True)  # wlacza ogrzewanie
-                    self.logger.info(self.obszar, 'Wlaczam grzanie: ' + a.get_nazwa() + ' temp.akt: ' + str(a.get_temp_aktualna()) +
+                    self.logger.info(self.obszar, a.get_nazwa(), 'Wlaczam grzanie, temp.akt: ' + str(a.get_temp_aktualna()) +
                                      ' temp.zadana: ' + str(a.get_temp_zadana()))
                     self.resetuj_ts()
             else:
                 if self.wewy.wyjscia.stan_przekaznika_nazwa(a.get_nazwa()):
                     self.wewy.wyjscia.ustaw_przekaznik_nazwa(a.get_nazwa(), False)  # wylacza ogrzewanie
-                    self.logger.info(self.obszar, 'Wylaczam grzanie: ' + a.get_nazwa() + ", przy temp. " + str(a.get_temp_aktualna()))
+                    self.logger.info(self.obszar, a.get_nazwa(), 'Wylaczam grzanie przy temp. ' + str(a.get_temp_aktualna()))
                     self.resetuj_ts()
 
     def procesuj_polecenie(self, **params):
@@ -211,13 +211,14 @@ class Ogrzewanie(Obszar):
             elif params[constants.KOMENDA] == constants.KOMENDA_STATUS_POMIESZCZENIA:
                 # przygotowanie statusu tylko z jednym pomieszczeniem ale jednoczesnie caly
                 if constants.NAZWA in params:
-                    self.aktualizuj_biezacy_stan(odbiornik_pomieszczenie=params[constants.NAZWA])
+                    stan = self.generuj_biezacy_stan(odbiornik_pomieszczenie=params[constants.NAZWA])
                     self.procesuje.release()
-                    return skonstruuj_odpowiedzV2OK(constants.KOMENDA_STATUS_POMIESZCZENIA, self._biezacy_stan, constants.OBSZAR_OGRZ)
+                    return skonstruuj_odpowiedzV2OK(constants.KOMENDA_STATUS_POMIESZCZENIA,
+                                                     stan, constants.OBSZAR_OGRZ)
             elif params[constants.KOMENDA] == constants.KOMENDA_WAKACJE:
                 if constants.POLE_WAKACJE in params:
                     self.ustaw_tryb_wakacje(params[constants.POLE_WAKACJE])
-                self.logger.info(self.obszar, 'Resetuje TS bo jest komenda wakacje ale nie ma pola wakacje: ' + str(params))
+                self.logger.info(self.obszar, 'wakacje', 'Resetuje TS bo jest komenda wakacje ale nie ma pola wakacje: ' + str(params))
                 self.resetuj_ts()
             elif params[constants.KOMENDA] == constants.KOMENDA_AKTYWUJ_OGRZEWANIE:
                 if constants.POLE_STAN in params:
@@ -225,7 +226,7 @@ class Ogrzewanie(Obszar):
                         self.__ogrzewanie_aktywne = True
                     else:
                         self.__ogrzewanie_aktywne = False
-                    self.logger.info(self.obszar, 'Aktywacja ogrzewania: ' + str(self.__ogrzewanie_aktywne))
+                    self.logger.info(self.obszar, 'ogrzewanie', 'Aktywacja ogrzewania: ' + str(self.__ogrzewanie_aktywne))
                     self.steruj_cyklicznie(self.__ogrzewanie_aktywne)
                     self.resetuj_ts()
                     THutils.zapisz_parametr_konfiguracji(self.obszar, constants.OGRZEWANIE_AKTYWNE,
@@ -239,18 +240,18 @@ class Ogrzewanie(Obszar):
             od = polecenie[constants.POLE_WAKACJE_OD_CZASU]
             do = polecenie[constants.POLE_WAKACJE_DO_CZASU]
         except (KeyError, AttributeError) as serr:
-            self.logger.warning(self.obszar, 'Bledna komenda ogrzewania wakacje: ' + str(polecenie))
+            self.logger.warning(self.obszar, 'wakacje', 'Bledna komenda ogrzewania wakacje: ' + str(polecenie))
             #TODO rturn bledu powinien wracac jako return JSON-RPC
             return
         if stan:    #ustawiamy tryb wakacji
             self.wakacje_ts_start = od
             self.wakacje_ts_stop = do
-            self.logger.info(self.obszar, 'Otrzymalem polecenie ustawienia wakacji, od: ' + str(od) + " do " + str(do))
+            self.logger.info(self.obszar, 'wakacje', 'Otrzymalem polecenie ustawienia wakacji, od: ' + str(od) + " do " + str(do))
             self.petla.aktywuj_pozycje_nazwa(self.obszar, TRYB_WAKACJE, False)  #usuniecie poprzedniego wpisu
             self.petla.dodaj_jednorazowy_od_godz_do_godz(TRYB_WAKACJE, self.obszar, od, do, dzialanie=self.dzialanie_petli)
             self.wakacje_zaplanowane = True
         else:   #deaktywujemy tryb wakacji
-            self.logger.info(self.obszar, 'Usuwam wakacje z petli')
+            self.logger.info(self.obszar, 'wakacje', 'Usuwam wakacje z petli')
             self.petla.aktywuj_pozycje_nazwa(self.obszar, TRYB_WAKACJE, False)
             self.wakacje_zaplanowane = False
 
@@ -264,8 +265,7 @@ class Ogrzewanie(Obszar):
     #    self.aktualizuj_biezacy_stan()
     #    return self._biezacy_stan
 
-    def aktualizuj_biezacy_stan(self, odbiornik_pomieszczenie=None):
-        #TODO zaimplementowac limitowanie po odbiorniku w pozostalych obszarach
+    def generuj_biezacy_stan(self, odbiornik_pomieszczenie=None):
         pozycje = []
         for j in self._tabela:  # type: Pomieszczenie
             if odbiornik_pomieszczenie:
@@ -273,7 +273,7 @@ class Ogrzewanie(Obszar):
                     pozycje.append(j.do_listy())
             else:
                 pozycje.append(j.do_listy())
-        self._biezacy_stan = {constants.TS: self.get_ts(),
+        return {constants.TS: self.get_ts(),
                               constants.OGRZEWANIE_AKTYWNE: self.__ogrzewanie_aktywne,
                               constants.CZAS: self.godzina_minuta(),
                               constants.DATA: self.zwroc_date(),
@@ -285,15 +285,21 @@ class Ogrzewanie(Obszar):
                                                                            odbiornik_pomieszczenie=odbiornik_pomieszczenie),
                               constants.POLE_POMIESZCZENIA: pozycje}
 
+    def aktualizuj_biezacy_stan(self, odbiornik_pomieszczenie=None):
+        #TODO zaimplementowac limitowanie po odbiorniku w pozostalych obszarach
+        self._biezacy_stan = self.generuj_biezacy_stan(odbiornik_pomieszczenie)
+
 class Pomieszczenie:
 
-    def __init__(self, obszar, nazwa, temp_min, temp_max, czas_do_alarmu=CZAS_DO_ALARMU, logger=None):
+    def __init__(self, obszar, nazwa, temp_min, temp_max, czas_do_alarmu=CZAS_DO_ALARMU,
+                 logger=None, korekta_temperatury=0.0):
         self.__obszar = obszar
         self.__nazwa = nazwa
         self.__tempMin = temp_min
         self.__tempMax = temp_max
         self.__tempZadana = temp_min
         self.__tempAktualna = temp_max
+        self.__korekta_temperatury = korekta_temperatury    #korygowanie odczytu temp z czujnika
         self.__blad_czujnika = False    #true jesli przez godzine nie bylo zmiany stanu
         self.__ts_aktualnej = 0    #ostatnie odczyt podany przez czujnik
         self.__czas_do_alarmu = czas_do_alarmu
@@ -309,7 +315,7 @@ class Pomieszczenie:
         if int(self.__ts_aktualnej + self.__czas_do_alarmu) < int(time()):
             if not self.__blad_czujnika:
                 if self.__logger:
-                    self.__logger.warning(self.__obszar, 'Blad czujnika temperatury: ' + self.__nazwa)
+                    self.__logger.warning(self.__obszar, self.__nazwa, 'Blad czujnika temperatury.')
             self.__blad_czujnika = True
 
             self.__grzeje = False
@@ -330,6 +336,7 @@ class Pomieszczenie:
 
     def podaj_temp(self, temp,):
         # zwraca Tru jesli przyjal nowa temperature
+        temp = float(temp) + float(self.__korekta_temperatury)
         wej = round(float(temp), 1)
         if wej == self.__tempAktualna:
             return False    #taka sama temperatura wiec nie ustawiam nowej, nie zmieniam TSa
@@ -350,7 +357,7 @@ class Pomieszczenie:
             return False
         #jesli w granicach to przypisac do self.tempZadana
         if self.__logger:
-            self.__logger.info(self.__obszar, 'Zadalem temperature ' + self.__nazwa + ' na ' + str(temp_zadana))
+            self.__logger.info(self.__obszar, self.__nazwa, 'Zadalem temperature na ' + str(temp_zadana))
         self.__tempZadana = a
         return True
 
