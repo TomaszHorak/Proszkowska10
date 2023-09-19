@@ -8,6 +8,7 @@ from THutils import zapisz_temp_w_logu
 from THutils import odczytaj_parametr_konfiguracji
 from THutils import skonstruuj_odpowiedzV2OK
 
+
 DEFAULT_TEMP_MIN = 17.0
 DEFAULT_TEMP_MAX = 25.0
 CZAS_OPOZNIENIA_PRZYJMOWANIA_01_STOPNIA = 30*60  # w sekundach
@@ -92,12 +93,13 @@ class Ogrzewanie(Obszar):
         if ogrzakt in ['True', 'true', 'TRUE']:
             self.__ogrzewanie_aktywne = True
 
+        #TODO minilamna temp pomieszczenia powinna byc odczytywana dynamicznie za kazdym razem z parametrow
         self._tabela = []
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_ZOSIA, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
                                           czas_do_alarmu=self.__czas_do_alarmu, logger=self.logger))
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_SALON, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
                                           czas_do_alarmu=self.__czas_do_alarmu,
-                                          logger=self.logger, korekta_temperatury=-1.2))
+                                          logger=self.logger, korekta_temperatury=-2.4))
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_STROZOWKA, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
                                           czas_do_alarmu=self.__czas_do_alarmu, logger=self.logger))
         self._tabela.append(Pomieszczenie(self.obszar, OGRZ_PIOTREK, self.__min_temp_pomieszczenia, self.__max_temp_pomieszczenia,
@@ -167,8 +169,10 @@ class Ogrzewanie(Obszar):
         #funckja ma byc wywolywana z petli, o nazwie 'steruj_cyklicznie'
         if not self.__ogrzewanie_aktywne:
             for a in self._tabela:  # type: Pomieszczenie
-                #self.logger.info(self.obszar, 'Wylaczam wszystkie bo ogrzewanie nieaktywne')
+                #self.logger.info(self.obszar, self.obszar, 'Wylaczam wszystkie bo ogrzewanie nieaktywne')
+                a.steruj(histereza=self.__histereza, wylacz_grzenie=True)
                 self.wewy.wyjscia.ustaw_przekaznik_nazwa(a.get_nazwa(), False)
+                self.resetuj_ts()
             return
         for a in self._tabela:  # type: Pomieszczenie
             #sprawdza czy trzeba grzac
@@ -205,6 +209,8 @@ class Ogrzewanie(Obszar):
                     pom = self.pomieszczenie_po_nazwie(params[constants.NAZWA])
                     if pom:
                         if constants.POLE_TEMP_AKTUALNA in params:
+                            #self.logger.info(self.obszar, params[constants.NAZWA], 'Pomieszczenei zaraportowalo ' +
+                            #                 params[constants.POLE_TEMP_AKTUALNA])
                             if pom.podaj_temp(params[constants.POLE_TEMP_AKTUALNA]):
                                 self.resetuj_ts()
                                 zapisz_temp_w_logu(self.log_temp, pom.get_nazwa(), pom.get_temp_aktualna())
@@ -308,8 +314,13 @@ class Pomieszczenie:
         self.__grzeje = False #true jest aktualnie grzeje, czyli przekaznik wlaczony
         self.__logger = logger
 
-    def steruj(self, histereza=HISTEREZA):   #steruje zaworami w zaleznosci od zadanej i aktualnej temperatury
+    def steruj(self, histereza=HISTEREZA, wylacz_grzenie=False):   #steruje zaworami w zaleznosci od zadanej i aktualnej temperatury
         #zwraca true jesli trzeba otworzyc zawor
+
+        #jesli explicit podane aby wylaczyc grzenie
+        if wylacz_grzenie:
+            self.__grzeje = False
+            return self.__grzeje
 
         # aktualizacja bledu, jesli przez jakis czas nie bylo zmiany temp to znaczy, ze czujnik nie podaje
         if int(self.__ts_aktualnej + self.__czas_do_alarmu) < int(time()):

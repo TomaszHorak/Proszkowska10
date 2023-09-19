@@ -24,7 +24,6 @@ PIN_SEKCJA7 = 6
 
 DEF_CZAS_ZALACZENIA_SEKCJI = 3600
 
-
 ''' Dokumentacja API
 
 every command structure:
@@ -42,7 +41,7 @@ class Podlewanie(Obszar):
     def __init__(self,
                  wewy,  # type: wejsciawyjscia.WejsciaWyjscia
                  petla,  # type: petlaczasowa.PetlaCzasowa
-                 logger,    #type: MojLogger
+                 logger,  # type: MojLogger
                  firebase_callback=None):
 
         Obszar.__init__(self, constants.OBSZAR_PODL,
@@ -53,8 +52,6 @@ class Podlewanie(Obszar):
                         rodzaj_komunikatu=constants.RODZAJ_KOMUNIKATU_STAN_PODLEWANIA,
                         callback_przekaznika_wyjscia=self.resetuj_ts,
                         dzialanie_petli=self.dzialanie_petli)
-
-
 
         self.gpio_pigpio = pigpio.pi()
         # TODO pigpio usunac, powinno byc w wewy
@@ -87,7 +84,7 @@ class Podlewanie(Obszar):
 
         self.wewy.wyjscia.wylacz_wszystkie_przekazniki(constants.OBSZAR_PODL)
         self.aktualizuj_biezacy_stan()
-        self.logger.info(self.obszar, 'Zainicjowalem klase podlewanie.')
+        self.logger.info(self.obszar, 'stat', 'Zainicjowalem klase podlewanie.')
 
     def procesuj_polecenie(self, **params):
         rodzaj = Obszar.procesuj_polecenie(self, **params)
@@ -100,37 +97,33 @@ class Podlewanie(Obszar):
 
     def aktywuj_podlewania(self, stan):
         if not stan:
-            self.petla.dzialaj_na_wszystkich_pozycjach(self.obszar, stan)   #wylaczenie wszystkich sekcji
-        self.logger.info(self.obszar, 'Uaktywniono podlewanie: ' + str(stan))
+            self.petla.dzialaj_na_wszystkich_pozycjach(self.obszar, stan)  # wylaczenie wszystkich sekcji
+        self.logger.info(self.obszar, self.obszar, 'Uaktywniono podlewanie: ' + str(stan))
         self.podlewanie_aktywne = stan
-        THutils.zapisz_parametr_konfiguracji(self.obszar, 'podlewanie_aktywne', stan, self.logger)
+        THutils.zapisz_parametr_konfiguracji(self.obszar, 'podlewanie', 'podlewanie_aktywne: ' + str(stan),
+                                             logger=self.logger)
         self.resetuj_ts()
         self.aktualizuj_biezacy_stan()
 
     def dzialanie_petli(self, nazwa, stan, pozycjapetli):
         self.aktualizuj_plywaki()
-       	self.resetuj_ts()
-        #self.logger.info(self.obszar, 'dzialanie petli ' + nazwa + ', stan: ' + str(stan))
+        self.resetuj_ts()
         if self.podlewanie_aktywne:
-            #stan_poprzzedni = self.wewy.wyjscia.stan_przekaznika_nazwa(nazwa)
-            #self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan)
             if self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan):
-            #if self.wewy.wyjscia.stan_przekaznika_nazwa(nazwa) != stan_poprzzedni:
-                self.logger.info(self.obszar, 'Podlewanie ' + nazwa + ', stan: ' + str(stan))
-                #self.resetuj_ts()
+                self.logger.info(self.obszar, nazwa, 'Stan: ' + str(stan))
                 self.odpal_firebase()
         else:
-            self.logger.warning(self.obszar, 'Proba dzialania na sekcji przy deaktywowanym podlewaniu.')
+            self.logger.warning(self.obszar, 'stat', 'Proba dzialania na sekcji przy deaktywowanym podlewaniu.')
 
     def aktualizuj_plywaki(self):
         # wywolywane za kazdym przebiegiem petli, bez wzgledu na to czy byla zmiana stanu czy nie
         self.odczytaj_stan_plywakow()
         if self.poprzedni_stan_plywak_studnia != self.plywak_studnia:
-            self.logger.info(self.obszar, 'Podlewanie: Plywak Studnia: ' + str(self.plywak_studnia))
+            self.logger.info(self.obszar, 'studnia', 'Plywak: ' + str(self.plywak_studnia))
             self.poprzedni_stan_plywak_studnia = self.plywak_studnia
             self.resetuj_ts()
         if self.poprzedni_stan_plywak_szambo != self.plywak_szambo:
-            self.logger.info(self.obszar, 'Podlewanie: Plywak Szambo: ' + str(self.plywak_szambo))
+            self.logger.info(self.obszar, 'szambo', 'Plywak: ' + str(self.plywak_szambo))
             self.poprzedni_stan_plywak_szambo = self.plywak_szambo
             self.resetuj_ts()
         self.aktualizuj_biezacy_stan()
@@ -143,10 +136,10 @@ class Podlewanie(Obszar):
 
     def aktualizuj_biezacy_stan(self, odbiornik_pomieszczenie=None):
         self._biezacy_stan = {'plywak_studnia': THutils.xstr(self.plywak_studnia),
-                                              'plywak_szambo': THutils.xstr(self.plywak_szambo),
-                                              'podlewanie_aktywne': self.podlewanie_aktywne,
-                                              constants.TS: self.get_ts(),
-                                              constants.CYKLE: self.petla.pozycje_do_listy(
-                                                  obszar=constants.OBSZAR_PODL),
-                                              constants.ODBIORNIKI: self.wewy.wyjscia.pozycje_do_listy(
-                                                  constants.OBSZAR_PODL)}
+                              'plywak_szambo': THutils.xstr(self.plywak_szambo),
+                              'podlewanie_aktywne': self.podlewanie_aktywne,
+                              constants.TS: self.get_ts(),
+                              constants.CYKLE: self.petla.pozycje_do_listy(
+                                  obszar=constants.OBSZAR_PODL),
+                              constants.ODBIORNIKI: self.wewy.wyjscia.pozycje_do_listy(
+                                  constants.OBSZAR_PODL)}

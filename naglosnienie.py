@@ -112,7 +112,7 @@ class Naglosnienie:
     def __init__(self, logger):
         self.logger = logger    #type: MojLogger
         self.obszar = constants.OBSZAR_NAGL
-        self.logger.info(self.obszar, "Zaczynam inicjalizowac Naglosnienie.")
+        self.logger.info(self.obszar, "init", "Zaczynam inicjalizowac Naglosnienie.")
 
         self.wzmacniacze = wzmacniacze.Wzmacniacze(self.logger)
         self.odczytaj_konf()
@@ -143,7 +143,7 @@ class Naglosnienie:
         #self.notyfikacja_firebase = firebasenotification.Firebasenotification()
         self.aktualizuj_status_odtwarzacza()
         self.aktualizuj_cyklicznie_stan_odtwarzacza()
-        self.logger.info(self.obszar, 'Zakonczylem konstruktora klasy naglosnienie.')
+        self.logger.info(self.obszar, "init", 'Zakonczylem konstruktora klasy naglosnienie.')
 
     def procesuj_polecenie(self, **params):
         if constants.KOMENDA in params:
@@ -168,6 +168,8 @@ class Naglosnienie:
                             self.kasuj_czas_ostatniej_aktywnosci()                        
                             #self.przekaz_stan_wzmacniaczy_do_garazu()
                             self.aktualizuj_status_odtwarzacza(wymus=True)
+                            return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE,
+                                                                    self.wzmacniacze.do_listy(), constants.OBSZAR_NAGL)
             elif params[constants.KOMENDA] == constants.KOMENDA_GLOSNOSC:
                 if constants.POLE_GLOSNOSC in params:
                     if constants.NAZWA in params:
@@ -176,11 +178,14 @@ class Naglosnienie:
                                 self.kasuj_czas_ostatniej_aktywnosci()
                                 #self.przekaz_stan_wzmacniaczy_do_garazu()
                                 self.aktualizuj_status_odtwarzacza(wymus=True)
+                                return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE,
+                                                                        self.wzmacniacze.do_listy(),
+                                                                        constants.OBSZAR_NAGL)
                         except ValueError as serr:
                             self.logger.warning(self.obszar, 'Podano glosnosc nie jako liczbe: ' + str(params[constants.POLE_GLOSNOSC]) + ' dla wzmacniacza: ' +
                                                 params[constants.NAZWA] + ". Blad: " + str(serr))
             elif params[constants.KOMENDA] == constants.KOMENDA_DZWONEK:
-                self.logger.info(self.obszar, 'Dzwonek do drzwi.')
+                self.logger.info(self.obszar, 'dzwonek', 'Dzwonek do drzwi.')
                 if not self.ic_trwa:
                     threading.Thread(target=self.odtworz_z_pliku, args=(self.plik_dzwonka,)).start()
             elif params[constants.KOMENDA] == constants.RODZAJ_KOMUNIKATU_LIRYKI:
@@ -238,6 +243,7 @@ class Naglosnienie:
                 # 2 ozncza losowo
                 if constants.POLE_WARTOSC in params:
                     self.aktualna_playlista.jak_odtwarza = int(params[constants.POLE_WARTOSC])
+                    self.aktualna_playlista.zapisz_playliste()
 #            elif params[constants.KOMENDA] == 'LINK':
 #                self.odtwarzaj_z_linku_zeruj_playliste(parametr2, '')
             elif params[constants.KOMENDA] == 'ULUB':
@@ -265,7 +271,7 @@ class Naglosnienie:
                                      args=(self.aktualna_playlista, params[constants.POLE_WARTOSC])).start()
             elif params[constants.KOMENDA] == 'PLAY':
                 if constants.POLE_WARTOSC in params:
-                    self.logger.info(self.obszar, 'Odtwarzam z playlisty pozycje nr: ' + str(params[constants.POLE_WARTOSC]))
+                    self.logger.info(self.obszar, 'odtworz', 'Odtwarzam z playlisty pozycje nr: ' + str(params[constants.POLE_WARTOSC]))
                     self.odtwarzaj_z_playlisty(nr_poz=int(params[constants.POLE_WARTOSC]))
             elif params[constants.KOMENDA] == 'L+01':
                 if constants.POLE_WARTOSC in params:
@@ -280,6 +286,9 @@ class Naglosnienie:
                 if constants.NAZWA in params:
                     self.toggle_wzmacniacz_nazwa(params[constants.NAZWA])
                     self.aktualizuj_status_odtwarzacza(wymus=True)
+                    return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_WZMACNIACZE,
+                                                            self.wzmacniacze.do_listy(),
+                                                            constants.OBSZAR_NAGL)
         self.aktualizuj_status_odtwarzacza()
         return THutils.skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_NAGLOSNIENIA,
                                                 self.biezacy_stan.biezacyStanDoTuple(), constants.OBSZAR_NAGL)
@@ -294,22 +303,22 @@ class Naglosnienie:
         if poz:
             pozy = self.aktualna_playlista.pozycja_z_json(poz[constants.POZYCJA])
             if dodaj:
-                self.logger.info(self.obszar, "Dodaje do playlisty z historii: " + str(poz[constants.POZYCJA]))
+                self.logger.info(self.obszar, 'historia', "Dodaje do playlisty z historii: " + str(poz[constants.POZYCJA]))
                 self.aktualna_playlista.pozycje.append(pozy)
                 self.aktualna_playlista.zapisz_playliste()
             else:
-                self.logger.info(self.obszar, "Odtwarzam z historii: " + str(poz[constants.POZYCJA]))
+                self.logger.info(self.obszar, 'historia', "Odtwarzam z historii: " + str(poz[constants.POZYCJA]))
                 self.aktualna_playlista.zeruj()
                 self.aktualna_playlista.pozycje.append(pozy)
                 self.aktualna_playlista.zapisz_playliste()
                 self.odtwarzaj_z_playlisty(zapisuj_historie=False)
         else:
-            self.logger.warning(self.obszar, "Nie odnalazlem pozycji historii dla has: " + str(hash_historii))
+            self.logger.warning(self.obszar, 'playlista', "Nie odnalazlem pozycji historii dla has: " + str(hash_historii))
 
     def odtworz_z_pliku(self, plik, usuwac_plik=False):
         self.ic_trwa = True
         # zapamietanie glosnosci i aktualnej pozycji
-        self.logger.info(self.obszar, 'Odtwarzam z pliku: ' + str(plik))
+        self.logger.info(self.obszar, 'odtworz', 'Odtwarzam z pliku: ' + str(plik))
         k_stan = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_KUCHNIA).stan
         k_gl = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_KUCHNIA).glosnosc
         l_stan = self.wzmacniacze.wzmacniacz_po_nazwie(wzmacniacze.NAZWA_WZMACNIACZA_LAZIENKA).stan
@@ -326,20 +335,20 @@ class Naglosnienie:
 
         # IC_czy_gralo - jesli True to znaczy, ze poprzednio gralo i mamy wznowic
         self.IC_czy_gralo = self.wzmacniacze.czy_ktorykolwiek_wlaczony()
-        self.logger.warning(self.obszar, 'IC-zlecam stop')
+        self.logger.warning(self.obszar, 'IC', 'IC-zlecam stop')
         self.stop()
         #self.pauza()
         licznik = 0
         while self.odtwarzacz.aktualnie_gra:
-            self.logger.warning(self.obszar, 'IC-jeszcze gra czekam w loopie, do skutku')
+            self.logger.warning(self.obszar, 'IC', 'IC-jeszcze gra czekam w loopie, do skutku')
             self.odtwarzacz.aktualizuj_stan()
             time.sleep(0.5)
             licznik = licznik + 1
             if licznik > 100:
-                self.logger.warning(self.obszar, 'IC-licznik przy STOP sie przekrecil')
+                self.logger.warning(self.obszar, 'IC', 'IC-licznik przy STOP sie przekrecil')
                 break
         #while odtwarzacz gra to czekamy i liczymy do stu albo wiecej, bez timesleep
-        self.logger.warning(self.obszar, 'IC-podmieniam odtwarzacz na KODI')
+        self.logger.warning(self.obszar, 'IC', 'IC-podmieniam odtwarzacz na KODI')
         self.odtwarzacz = self.kodi
 
 
@@ -352,15 +361,15 @@ class Naglosnienie:
         self.odtwarzacz.odtwarzaj_z_linku(plik)
         self.odtwarzacz.aktualnie_gra = True
         licznik = 0
-        self.logger.warning(self.obszar, 'IC-rozpoczynam loop czekania az skonczy odtwarzac')
+        self.logger.warning(self.obszar, 'IC', 'IC-rozpoczynam loop czekania az skonczy odtwarzac')
         while self.odtwarzacz.aktualnie_gra:
             licznik = licznik + 1
             if licznik > 100:
-                self.logger.warning(self.obszar, 'IC-licznik przy odtwarzaniu sie przekrecil')
+                self.logger.warning(self.obszar, 'IC', 'IC-licznik przy odtwarzaniu sie przekrecil')
                 break
             time.sleep(2)
             self.odtwarzacz.aktualizuj_stan()
-        self.logger.warning(self.obszar, 'IC-zakonczylem loop czekania na odwtorzenie dzownka')
+        self.logger.warning(self.obszar, 'IC', 'IC-zakonczylem loop czekania na odwtorzenie dzownka')
 
         # usuniecie pliku z interkomem
         if usuwac_plik:
@@ -380,7 +389,7 @@ class Naglosnienie:
         self.wzmacniacze.set_glosnosc_nazwa(wzmacniacze.NAZWA_WZMACNIACZA_LAZIENKA, l_gl)
 
         if self.IC_czy_gralo:
-            self.logger.warning(self.obszar, 'IC-gralo poprzednio, odtwarzam z playlisty')
+            self.logger.warning(self.obszar, 'IC', 'IC-gralo poprzednio, odtwarzam z playlisty')
             self.odtwarzaj_z_playlisty()
             if self.aktualna_playlista.aktualna_pozycja().typ != playlista.TYP_RADIO:
                 licznik = 0
@@ -447,7 +456,7 @@ class Naglosnienie:
 
     def aktualizuj_status_odtwarzacza(self, wymus=False):  #, force_kodi=False):
         if self.ic_trwa:
-            self.logger.warning(self.obszar, 'Nie aktualizuje stanu odtwarzacza bo trwa IC')
+            self.logger.warning(self.obszar, 'stat', 'Nie aktualizuje stanu odtwarzacza bo trwa IC')
             return
         fire = wymus
         self.lock_aktualizacji_statusu.acquire()
@@ -473,7 +482,7 @@ class Naglosnienie:
             # TODO czy nie mozna przejsc zawsze na self.odtwarzacz.tytul?
             if poz.typ == playlista.TYP_RADIO:
                 if poz.serwis_radiowy == radia.NAZWA_SERWISU_OPENFM:
-                    if poz.ts_stop < time.time()*1000:
+                    if poz.ts_stop < int(time.time()):
                         if self.wzmacniacze.czy_ktorykolwiek_wlaczony():
                             artysta, album, tytul_utworu, ts_konca = self.katalog_radii.odswiez_co_grane_openfm(poz.id_stacji_radiowej)
                             poz.album = album
@@ -481,8 +490,8 @@ class Naglosnienie:
                             poz.title = tytul_utworu
                             tytul = tytul_utworu
                             # kontrola nie za czestego odczytywania co grane
-                            if ts_konca < time.time()*1000:
-                                poz.ts_stop = time.time()*1000 + radia.INTERWAL_ODCZYTU_CO_GRANE
+                            if ts_konca < int(time.time()):
+                                poz.ts_stop = int(time.time()) + radia.INTERWAL_ODCZYTU_CO_GRANE
                             else:
                                 poz.ts_stop = ts_konca
                 else:
@@ -514,7 +523,7 @@ class Naglosnienie:
                 if not self.ic_trwa:
                     fire = True
         except AttributeError:
-            self.logger.warning(self.obszar, "Brak sekcji [aktualna_pozycja]: " + str(self.biezacy_stan.aktualna_pozycja.pozycja_do_listy()))
+            self.logger.warning(self.obszar, 'stat', "Brak sekcji [aktualna_pozycja]: " + str(self.biezacy_stan.aktualna_pozycja.pozycja_do_listy()))
         self.biezacy_stan.link = link
         
         #resetowanie ts tylko kiedy stan rozni sie od poprzedniego, wybrane elementy
@@ -557,32 +566,32 @@ class Naglosnienie:
     def odtwarzaj_ulubione_numer(self, numer_ulubionego):
         ul = self.ulub.ulubiony_po_numerze(numer_ulubionego)
         if not ul:
-            self.logger.warning(self.obszar, 'Odtwarzaj-ulub_numer, nie ma takiego numeru: ' +
+            self.logger.warning(self.obszar, 'ulubione', 'Odtwarzaj-ulub_numer, nie ma takiego numeru: ' +
                                 str(numer_ulubionego))
             return
         self.kasuj_czas_ostatniej_aktywnosci()
         self.stop()
         self.aktualna_playlista.inicjalizuj_playliste_z_pliku(ul.get_plik())
         self.odtwarzaj_z_playlisty(0)
-        self.logger.info(self.obszar, 'Odtwarzam ulubione nr: ' + str(numer_ulubionego) +
+        self.logger.info(self.obszar, 'odtworz', 'Odtwarzam ulubione nr: ' + str(numer_ulubionego) +
                          " : " + ul.get_nazwa())
 
     def odtwarzaj_ulubione_nazwa(self, nazwa_ulubionego):
         ul = self.ulub.ulubiony_po_nazwie(nazwa_ulubionego)
         if not ul:
-            self.logger.warning(self.obszar, 'Odtwarzaj-ulub_numer, nie ma takiego numeru: ' +
+            self.logger.warning(self.obszar, 'ulubione', 'Odtwarzaj-ulub_numer, nie ma takiego numeru: ' +
                                 str(nazwa_ulubionego))
             return
         self.kasuj_czas_ostatniej_aktywnosci()
         self.stop()
         self.aktualna_playlista.inicjalizuj_playliste_z_pliku(ul.get_plik())
         self.odtwarzaj_z_playlisty(0)
-        self.logger.info(self.obszar, 'Odtwarzam ulubione nr: ' + str(nazwa_ulubionego))
+        self.logger.info(self.obszar, 'odtworz', 'Odtwarzam ulubione nr: ' + str(nazwa_ulubionego))
 
     def dodaj_do_playlisty_z_ulubionego(self, numer_ulubionego):
         ul = self.ulub.ulubiony_po_numerze(numer_ulubionego)
         if not ul:
-            self.logger.warning(self.obszar, 'Dodaj-ulub_numer, nie ma takiego numeru: ' +
+            self.logger.warning(self.obszar, 'ulubione', 'Dodaj-ulub_numer, nie ma takiego numeru: ' +
                                 str(numer_ulubionego))
             return
         #if ul.typ == playlista.TYP_RADIO:
@@ -591,18 +600,18 @@ class Naglosnienie:
         self.aktualna_playlista.inicjalizuj_playliste_z_pliku(ul.get_plik(), zeruj=False)
 
     def odtwarzaj_z_radii_po_id(self, nazwa_serwisu, idstacji):
-        self.logger.info(self.obszar, 'Odtwarzam z radii: ' + nazwa_serwisu + ' ' + str(idstacji))
+        self.logger.info(self.obszar, nazwa_serwisu, 'Odtwarzam z radii: ' + ' ' + str(idstacji))
         a = self.katalog_radii.znajdz_stacje_po_nazwie_i_id(nazwa_serwisu, idstacji)
         if not a:
-            self.logger.warning(self.obszar, 'Nie odnalazlem takiego radia po id: ' + nazwa_serwisu + ' ' + idstacji)
+            self.logger.warning(self.obszar, nazwa_serwisu, 'Nie odnalazlem takiego radia po id: ' + idstacji)
             return
         self.odtwarzaj_z_radii(a)
 
     def odtwarzaj_z_radii_po_nazwie(self, nazwa_serwisu, nazwa_stacji):
-        self.logger.info(self.obszar, 'Odtwarzam z radii: ' + nazwa_serwisu + ' ' + nazwa_stacji)
+        self.logger.info(self.obszar, nazwa_serwisu, 'Odtwarzam z radii: ' + ' ' + nazwa_stacji)
         a = self.katalog_radii.znajdz_stacje_po_nazwie_i_serwisie(nazwa_serwisu, nazwa_stacji)
         if not a:
-            self.logger.warning(self.obszar, 'Nie odnalazlem takiego radia: ' + nazwa_serwisu + ' ' + nazwa_stacji)
+            self.logger.warning(self.obszar, nazwa_serwisu, 'Nie odnalazlem takiego radia: ' + nazwa_stacji)
             return
         self.odtwarzaj_z_radii(a)
 
@@ -664,7 +673,7 @@ class Naglosnienie:
 
     def odtwarzaj_z_playlisty(self, nr_poz=None, zapisuj_historie=True):
         if self.aktualna_playlista.liczba_pozycji() == 0:
-            self.logger.warning(self.obszar, 'odtwarzaj z plalisty: pusta playlista')
+            self.logger.warning(self.obszar, 'playlista', 'odtwarzaj z plalisty: pusta playlista')
             return
 
         if nr_poz is not None:
@@ -690,11 +699,11 @@ class Naglosnienie:
             if self.aktualna_playlista.aktualna_pozycja().typ == playlista.TYP_SPOTIFY:
                 self.spoti.aktualizuj_stan()
                 self.odtwarzacz = self.spoti
-                self.logger.warning(self.obszar, 'podmienilem odtwarzacz na spotify')
+                self.logger.warning(self.obszar, 'stat', 'podmienilem odtwarzacz na spotify')
             else:
                 self.kodi.aktualizuj_stan()
                 self.odtwarzacz = self.kodi
-                self.logger.warning(self.obszar, 'podmienilem odtwarzacz na kodi')
+                self.logger.warning(self.obszar, 'stat', 'podmienilem odtwarzacz na kodi')
 
     def nastepny(self):
         self.kasuj_czas_ostatniej_aktywnosci()
@@ -749,7 +758,7 @@ class Naglosnienie:
                 self.wzmacniacze.wlacz_wylacz_wszystkie(False)  # wylacz_wszystkie_wzmacniacze()
                 self.play_pause()
                 self.aktualizuj_status_odtwarzacza()
-                self.logger.info(self.obszar, 'Wylaczam wzmacn przy braku aktywnosci. Czas ostatn aktywn: ' +
+                self.logger.info(self.obszar, "cisza", 'Wylaczam wzmacniacze przy braku aktywnosci. Czas ostatniej aktywnosci: ' +
                                  str(self.czas_ostatniej_aktywnosci))
         # threading.Timer(CZAS_SPRAWDZANIA_OSTATNIEJ_AKTYWNOSCI,
         #                self.automatyczne_wylaczanie_przy_braku_aktywnosci).start()
