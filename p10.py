@@ -200,7 +200,7 @@ class RequestHandlerDlaJSONRPC(pyjsonrpc.HttpRequestHandler):
 
 
 def resetuj():
-    logger.info("P10", 'Resetuje program....')
+    logger.info("P10", 'status', 'Resetuje program....')
     os.execv('sudo',  os.path.realpath(__file__) + constants.PLIK_RESETU)
     #httpd.server_close()
     #time.sleep(5)
@@ -248,7 +248,7 @@ def generuj_stat_prosty():
         tsulub = status_naglosnienia[constants.POLE_TIMESTAMP_ULUBIONYCH]
         tswzmac = status_naglosnienia[constants.POLE_TIMESTAMP_WZMACNIACZY]
     except (KeyError, TypeError) as serr:
-        logger.warning(constants.OBSZAR_P10,
+        logger.warning(constants.OBSZAR_P10, 'stat',
                        'Nie moge odczytac statusu z naglosnienia, zmienna nie ustawiona: ' + str(serr))
 
     stat_prosty = {constants.POLE_TIMESTAMP_NAGLOSNIENIA: tsnagl,
@@ -315,7 +315,7 @@ logger = MojLogger(constants.NAZWA_LOGGERA,
                    THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_P10, 'PLIK_LOGU', None))
 
 
-logger.info(constants.OBSZAR_P10, "Rozpoczynam program glowny.")
+logger.info(constants.OBSZAR_P10, 'stat', "Rozpoczynam program glowny.")
 moje_ip = THutils.moje_ip('eth0')
 czas_odswiezania_statusu_zlozonego = int(THutils.odczytaj_parametr_konfiguracji(constants.OBSZAR_P10,
                                                                                 'CZAS_ODSWIEZANIA_STATUSU_ZLOZONEGO',
@@ -366,7 +366,7 @@ try:
     http_server.serve_forever()
 except:
     e = sys.exc_info()[0]
-    logger.warning(constants.OBSZAR_P10, 'Nieobslugiwany blad servera: ' + str(e))
+    logger.warning(constants.OBSZAR_P10, 'stat', 'Nieobslugiwany blad servera: ' + str(e))
 
 
 

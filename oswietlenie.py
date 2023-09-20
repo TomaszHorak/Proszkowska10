@@ -54,16 +54,16 @@ class Oswietlenie(Obszar):
         self.wewy.wyjscia.ustaw_przekaznik_nazwa(NAZWA_JADALNIA, False)
 
         self.aktualizuj_biezacy_stan()
-        self.logger.info(self.obszar, 'Zainicjowalem klase oswietlenie.')
+        self.logger.info(self.obszar, 'oswietlenie', 'Zainicjowalem klase oswietlenie.')
 
     def wejscie_callback(self, pin, nazwa, stan):
         if nazwa == WEJSCIE_WLACZNIK_SMIETNIK_WIATROLAP:
             if stan == 0:
-                self.logger.info(self.obszar, 'Wcisnieto przycisk Smietnik Wiatrolap.')
+                self.logger.info(self.obszar, 'wiatrolap', 'Wcisnieto przycisk Smietnik Wiatrolap.')
                 self.wlacz_smietnik_samodzielny()
         elif nazwa == WEJSCIE_WLACZNIK_SMIETNIK_GARAZ4:
             if stan == 0:
-                self.logger.info(self.obszar, 'Wcisnieto przycisk Smietnik Garaz.')
+                self.logger.info(self.obszar, 'garaz', 'Wcisnieto przycisk Smietnik Garaz.')
                 self.wlacz_smietnik_samodzielny()
         else:
             return
@@ -77,9 +77,9 @@ class Oswietlenie(Obszar):
         return Obszar.odpowiedz(self) #skonstruuj_odpowiedzV2OK(constants.RODZAJ_KOMUNIKATU_STAN_OSWIETLENIA, self.stan_oswietlenia)
 
     def dzialanie_petli(self, nazwa, stan, pozycjapetli):
-        self.logger.info(self.obszar, 'Jest dzialanie petli, nazwa : ' + nazwa + ', stan ' + str(stan))
+        self.logger.info(self.obszar, nazwa, 'Jest dzialanie petli, stan ' + str(stan))
         if self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan):
-            self.logger.info(self.obszar, 'Oswietlenie ' + nazwa + ', stan: ' + str(stan))
+            self.logger.info(self.obszar, nazwa, 'Zmiana stanu na: ' + str(stan))
             #self.resetuj_ts()
             #self.aktualizuj_biezacy_stan()
             self.odpal_firebase()
@@ -87,7 +87,7 @@ class Oswietlenie(Obszar):
     def wlacz_smietnik_samodzielny(self):
         przek_smie = self.wewy.wyjscia.przekaznik_po_nazwie(NAZWA_SMIETNIK)
         if not przek_smie.get_stan(): #self.prze.stan_przekaznika_nazwa(NAZWA_SMIETNIK):
-            tim = time.time()*1000
+            tim = time.time()
             self.petla.dodaj_jednorazowy_od_godz_do_godz(przek_smie.get_nazwa(), self.obszar, ts_start=tim,
                                                          ts_stop=tim+int(przek_smie.get_defczaszalaczenia()),
                                                          dzialanie=self.dzialanie_petli)
@@ -95,7 +95,7 @@ class Oswietlenie(Obszar):
 #                                                          przek_smie.get_defczaszalaczenia(),
 #                                                          obszar=self.obszar,
 #                                                          dzialanie=self.dzialanie_petli)
-            self.logger.info(self.obszar, 'Wlaczylem oswietlenie nad smietnikiem.')
+            self.logger.info(self.obszar, 'smietnik', 'Wlaczylem oswietlenie nad smietnikiem.')
         return
 
     def aktualizuj_biezacy_stan(self, odbiornik_pomieszczenie=None):

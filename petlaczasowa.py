@@ -101,7 +101,7 @@ class PetlaCzasowa:
     def dodaj_nowy_cykl(self, poz, dzialanie):
         p = self.pozycja_z_json(poz)  # type: PozycjaPetli
         if not p:
-            self._logger.warning(constants.OBSZAR_PETLA, 'Nie moge stworzyc nowego cyklu: ' + str(poz))
+            self._logger.warning(constants.OBSZAR_PETLA, 'petla', 'Nie moge stworzyc nowego cyklu: ' + str(poz))
             return
         p.rejestruj_dzialanie(dzialanie)
         p._hash = getrandbits(32)
@@ -121,7 +121,7 @@ class PetlaCzasowa:
         # poz jest typu tuple bo pochodzi z API
         p = self.pozycja_z_json(poz)  # type: PozycjaPetli
         if not p:
-            self._logger.warning(constants.OBSZAR_PETLA,
+            self._logger.warning(constants.OBSZAR_PETLA, 'petla',
                                'Chciano zaktualizowac pozycje petli ale byla pusta')
             return
         self._petla_w_trakcie_przebiegu.acquire()
@@ -145,10 +145,10 @@ class PetlaCzasowa:
                     self._zapisz_cykle_w_konfiguracji()
                     czy_byla_aktualizacja = True
                 except (KeyError, AttributeError) as serr:
-                    self._logger.warning(constants.OBSZAR_PETLA,
+                    self._logger.warning(constants.OBSZAR_PETLA, 'petla',
                                        'Brak klucza w poleceniu zmiany cykli: ' + str(serr))
         if not czy_byla_aktualizacja:
-            self._logger.warning(constants.OBSZAR_PETLA, 'Probowano zaktualizowac cykl ale sie nie udalo: ' + str(poz))
+            self._logger.warning(constants.OBSZAR_PETLA, 'petla', 'Probowano zaktualizowac cykl ale sie nie udalo: ' + str(poz))
         self._petla_w_trakcie_przebiegu.release()
         return czy_byla_aktualizacja
     '''    def dodaj_jednorazowy_na_czas_od_teraz(self, nazwa, czas, obszar='', dzialanie=None, wartosc=0):
@@ -165,8 +165,8 @@ class PetlaCzasowa:
         self._petla_w_trakcie_przebiegu.acquire()
         self._tabela.append(PozycjaPetli(nazwa, obszar=obszar, ts_start=ts_start,
                                          ts_stop=ts_stop, aktywne=True, wartosc=wartosc, dzialanie=dzialanie))
-        self._logger.info(constants.OBSZAR_PETLA, 'Dodaje jednorazowy z TSami, obszar ' +
-                           obszar + ', nazwa ' + nazwa + ' ' + str(ts_start) + ' ' + str(ts_stop))
+        self._logger.info(constants.OBSZAR_PETLA, nazwa, 'Dodaje jednorazowy z TSami, obszar ' +
+                           obszar + ' ' + str(ts_start) + ' ' + str(ts_stop))
         self._zapisz_cykle_w_konfiguracji()
         self._petla_w_trakcie_przebiegu.release()
 
@@ -179,7 +179,7 @@ class PetlaCzasowa:
         try:
             c = json.loads(result)
         except Exception as e:
-            self._logger.warning(constants.OBSZAR_PETLA, 'Nie potrafie odczytac cykli ' + ' :' + str(e))
+            self._logger.warning(constants.OBSZAR_PETLA, 'petla', 'Nie potrafie odczytac cykli ' + ' :' + str(e))
             return
 
         self._petla_w_trakcie_przebiegu.acquire()
@@ -201,14 +201,14 @@ class PetlaCzasowa:
                     czas_interwalu = item[constants.PETLA_CZAS_INTERWALU]
                     czas_miedzy_interwalami = item[constants.PETLA_CZAS_MIEDZY_INTERWALAMI]
                 except (KeyError, AttributeError) as serr:
-                    self._logger.warning(constants.OBSZAR_PETLA,
+                    self._logger.warning(constants.OBSZAR_PETLA, 'petla',
                                        'Brak klucza w odczycie cykli: ' + str(serr))
 
                 hash = 0
                 try:
                     hash = item[constants.HASH]
                 except (KeyError, AttributeError) as serr:
-                    self._logger.warning(constants.OBSZAR_PETLA,
+                    self._logger.warning(constants.OBSZAR_PETLA, 'petla',
                                        'Brak klucza w odczycie cykli: ' + str(serr))
                 try:
                     wartosc = item[constants.PETLA_WARTOSC]
@@ -242,11 +242,11 @@ class PetlaCzasowa:
                                  #ts_stop=ts_stop,
                                  wartosc=wartosc))
         except AttributeError as serr:
-            self._logger.warning(constants.OBSZAR_PETLA,
+            self._logger.warning(constants.OBSZAR_PETLA, 'petla',
                                'Blad procesowania cykli: ' + '. ' + str(serr))
 
         self._petla_w_trakcie_przebiegu.release()
-        self._logger.info(constants.OBSZAR_PETLA, 'Odswiezylem cykle.')
+        self._logger.info(constants.OBSZAR_PETLA, 'cykle', 'Odswiezylem cykle.')
 
     def _zapisz_cykle_w_konfiguracji(self):
         result = json.dumps(self.pozycje_do_listy())
@@ -312,7 +312,7 @@ class PetlaCzasowa:
             #typ = poz[constants.PETLA_TYP]
             aktywne = poz[constants.PETLA_AKTYWNE]
         except (KeyError, AttributeError) as serr:
-            self._logger.warning(constants.OBSZAR_PETLA, 'Petla: brak klucza w pozycje_z_json: ' + str(serr))
+            self._logger.warning(constants.OBSZAR_PETLA, 'petla', 'Petla: brak klucza w pozycje_z_json: ' + str(serr))
             return None
         try:
             godz_wl = poz[constants.PETLA_GODZ_WL]
