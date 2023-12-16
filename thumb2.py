@@ -12,28 +12,26 @@ class Thumb:
         self.sciezka_z_MNT = narzedzia.add_prefix_mnt(path.dirname(self.nazwa_pliku))
         self.sciezka_folderu_thumb = path.join(self.sciezka_z_MNT, constants.FOLDER_THUMB)
         self.sciezka_folderu_thumb_small = path.join(self.sciezka_z_MNT, constants.FOLDER_THUMB_SMALL)
-        self.nazwa_pliku_thumb_small = path.join(self.sciezka_folderu_thumb_small, self.plik)
-        self.nazwa_pliku_thumb = path.join(self.sciezka_folderu_thumb, self.plik)
-
-        self.__create_thumb = True  #wskazuje czy tworzyc plik z thumbem, jesli false to znaczy ze wziasc ikone
-
-        if narzedzia.is_dir(nazwa_pliku):
-            self.nazwa_pliku_thumb_small = "./templates/icons8_folder.png" #constants.API_V2_FOLDER_ICON
-            self.nazwa_pliku_thumb = "./templates/icons8_folder.png" #constants.API_V2_FOLDER_ICON
-            self.__create_thumb = False
-
-        if narzedzia.is_pdf(nazwa_pliku):
-            self.nazwa_pliku_thumb_small = "./templates/icons8_pdf.png" #constants.API_V2_PDF_ICON
-            self.nazwa_pliku_thumb = "./templates/icons8_pdf.png" #constants.API_V2_PDF_ICON
-            self.__create_thumb = False
-
-        #self.nazwa_pliku_txt_dl_filmu = ""
-        if narzedzia.is_video(nazwa_pliku):
-            #self.nazwa_pliku_txt_dl_filmu = self.nazwa_pliku_thumb_small+ ".txt"
-            self.nazwa_pliku_thumb_small = self.nazwa_pliku_thumb_small + ".png"
-            self.nazwa_pliku_thumb = self.nazwa_pliku_thumb + ".png"
-   
+        self.nazwa_pliku_thumb_small, nazwa_ikony = narzedzia.determinuj_ikone(nazwa_pliku)
+        self.nazwa_pliku_thumb = self.nazwa_pliku_thumb_small
+        self.__create_thumb = False  #wskazuje czy tworzyc plik z thumbem, jesli false to znaczy ze wziasc ikone
         self.__tworz_katalogi()
+        
+        if narzedzia.is_video(nazwa_pliku):
+            self.nazwa_pliku_thumb_small = path.join(self.sciezka_folderu_thumb_small, self.plik) + ".png"
+            self.nazwa_pliku_thumb = path.join(self.sciezka_folderu_thumb, self.plik) + ".png"
+            self.__create_thumb = True
+            return
+
+        if narzedzia.is_picture(nazwa_pliku):
+            self.nazwa_pliku_thumb_small = path.join(self.sciezka_folderu_thumb_small, self.plik)
+            self.nazwa_pliku_thumb = path.join(self.sciezka_folderu_thumb, self.plik)
+            self.__create_thumb = True
+            return
+            
+        #self.nazwa_pliku_thumb_small = "./templates/ikona_plik.png"
+        #self.nazwa_pliku_thumb = "./templates/ikona_plik.png"            
+
     
     def get_thumb_big(self):
         if not self.__create_thumb:
@@ -66,7 +64,7 @@ class Thumb:
         #dlugosc = subprocess.check_output(['ffprobe', '-i', zrodlo, '-show_format', '-v', 'quiet', '|', 'grep', 'duration='])
         #parametry_video = subprocess.check_output(['ffprobe', '-i', zrodlo.encode('utf8'), '-show_format', '-v', 'quiet'])
         parametry_video = subprocess.check_output(['ffprobe', '-i', zrodlo, '-show_format', '-v', 'quiet'])
-        dlugosc = int(float(str(parametry_video).split('duration=',1)[1][:9]))
+        dlugosc = int(float(str(parametry_video).split('duration=',1)[1][:8]))
         from datetime import timedelta
         
         self.__dodaj_tekst_dlugosc(str(timedelta(seconds=dlugosc)), cel)
@@ -87,7 +85,10 @@ class Thumb:
         img.save(plik, quality=100)
     
     def __tworz_katalogi(self):
-        if not path.exists(self.sciezka_folderu_thumb):
-            makedirs(self.sciezka_folderu_thumb)
-        if not path.exists(self.sciezka_folderu_thumb_small):
-            makedirs(self.sciezka_folderu_thumb_small)
+        try:
+            if not path.exists(self.sciezka_folderu_thumb):
+                makedirs(self.sciezka_folderu_thumb)
+            if not path.exists(self.sciezka_folderu_thumb_small):
+                makedirs(self.sciezka_folderu_thumb_small)
+        except:
+            pass
