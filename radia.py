@@ -19,6 +19,8 @@ NAZWA_SERWISU_RMFFM = 'RMF FM'
 NAZWA_SERWISU_TUNEIN = 'TuneIn'
 NAZWA_SERWISU_POLSKIERADIO = 'Polskie Radio'
 
+#TODO API was chenged for OPEN FM and now list of stations is not being updated
+
 INTERWAL_ODCZYTU_CO_GRANE = 120  #w sekundach
 
 SERWIS = 'serwis'
