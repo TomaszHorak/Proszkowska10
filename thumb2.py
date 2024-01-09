@@ -3,6 +3,8 @@ from os import path, makedirs
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 import narzedzia
 
+#TODO thumbnaile dla PDFa dorobić: from pdf2image import convert_from_path
+
 class Thumb:
     def __init__(self, nazwa_pliku, instance_path):
         self.nazwa_pliku = nazwa_pliku
