@@ -24,4 +24,7 @@ Future:
 
 To deploy my project in your location you have to:
 - install hardware, I used Raspberry but you can choose different platform
-- configure  
+- configure physical hardware ports (pins), represnting respectively outputs (for relays) and inputs (for buttons)
+- configure sections/receivers eg. names of your rooms, lights, etc.
+
+Currently solution is not ready for easy deployment, there is no configuration wizard, you have to workout by yourself how to deploy in the most effective way in your environment.
