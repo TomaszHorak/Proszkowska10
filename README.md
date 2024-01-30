@@ -21,3 +21,7 @@ As solution was stabilised I've extended it with following features:
 Future:
 - build Web UI
 - new are: surviliance, cameras around the house
+
+To deploy my project in your location you have to:
+- install hardware, I used Raspberry but you can choose different platform
+- configure  
