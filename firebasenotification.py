@@ -49,11 +49,6 @@ class Firebasenotification:
 
     def notify(self, dane=''):
 
-        '''parametry = {
-            "Content-Type": "application/json",
-            "Authorization": "key=AAAA0FewZwk:APA91bFG2zaE077_ztGG6g9oFd3jDUJCu3GbvM2XiJpDn2Fxjii5CkEZMkvADSQ0KAVK_7bfVwpGb_p6zeDznoRgJ_4sefLE3oBbTOWlk57Dl3ESsggfQ2Liiuk0RS47M3jJ1KSB2Rfn"
-        }'''
-
         if self.__token is None:
             self.__refresh_access_token()
         if self.__token is None:
