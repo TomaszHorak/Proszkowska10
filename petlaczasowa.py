@@ -19,8 +19,6 @@ class PetlaCzasowa:
         self._tabela = []
         self._petla_w_trakcie_przebiegu = threading.Lock()  # jesli tru to blokuj dodawanie
         self._odczytaj_cykle_z_konfiguracji()
-        # self._odczytaj_cykle_z_konfiguracji_cyklicznie()
-        # self._petlaStart()
 
     def rejestruj_dzialanie(self, obszar, dzialanie):
         for a in self._tabela:
@@ -81,10 +79,6 @@ class PetlaCzasowa:
                         self._usun_z_tabeli_nazwa_jednorazzowy_w_przebiegu(a.get_nazwa())
                     if a.get_stan():
                         a._dzialaj_na_pozycji(False)
-
-                # if a.get_czas_do_konca() != 0:
-                #    if a.get_stan():
-                #        a._dzialaj_na_pozycji(False, tylko_aktualizuj_ts=True)
 
         self._petla_w_trakcie_przebiegu.release()
         t = threading.Timer(CZAS_URUCHOMIENIA_PETLI, self.petlaStart)
