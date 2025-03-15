@@ -1,78 +1,76 @@
 # klasa obslugi KODI, cyklicznie odczytuje stan odtwarzacza, zwraca tytul, czasy itd
-from playlista import Playlista
+import jsonrpclib
+import threading
+import THutils
 import requests
 import json
+import odtwarzacz
 from constants import OBSZAR_NAGL
-from CurrentStatus import CurrentStatus
-from CurrentPlaylist import CurrentPlaylist
 
 CZAS_INICJALIZOWANIA_KODI = 300
-ADRES_KODI = 'http://127.0.0.1:8080/jsonrpc'
 
-class Kodi():
-    def __init__(self, currentStatus:CurrentStatus, currentPlaylist: CurrentPlaylist, logger=None):
+
+class Kodi(odtwarzacz.Odtwarzacz):
+    def __init__(self, logger, adres):
+        odtwarzacz.Odtwarzacz.__init__(self)
         self.logger = logger
-        self.currentStatus = currentStatus
-        self.currentPlaylist = currentPlaylist
-        self.__ask_kodi("Application.SetVolume", {"volume": 100})
-
-    def next(self):
-        pass
-
-    def previous(self):
-        pass
-
-    def seek(self, position: int):
-        pass
+        self.adres_kodi = adres
+        self.__inicjalizuj_kodi()
+        return
 
     def aktualizuj_stan(self):
-        self.currentPlaylist.clear()
-        self.currentPlaylist.items.append(self.currentStatus.item)
-        if self.currentPlaylist.name != self.currentStatus.item.name:
-            self.currentPlaylist.resetTS()
-        self.currentPlaylist.name = self.currentStatus.item.name
-
+        odtwarzacz.Odtwarzacz.aktualizuj_stan(self)
         player = self.__get_aktywny_player_kodi()
-        if player is None:
-            self.currentStatus.aktualnie_gra = False
-            self.currentStatus.item.title = ''
-            return
+        if player is not None:
+            par = {"playerid": player,
+                   "properties": ['file', 'album']}
+            player_item = self.__ask_kodi("Player.GetItem", par)
+            par = {"playerid": player,
+                   "properties": ['speed', 'time', 'percentage', 'position', 'totaltime']}
+            player_properties = self.__ask_kodi("Player.GetProperties", par)
+        else:
+            player_item = player_properties = None
 
-        par = {"playerid": player,
-               "properties": ['file', 'album']}
-        player_item = self.__ask_kodi("Player.GetItem", par)
-        par = {"playerid": player,
-               "properties": ['speed', 'time', 'percentage', 'position', 'totaltime']}
-        player_properties = self.__ask_kodi("Player.GetProperties", par)
-
-        #self.currentStatus.aktualnie_gra = False
+        self.aktualnie_gra = False
         if player_properties:
             if int(player_properties['speed']) == 1:
-                if not self.currentStatus.aktualnie_gra:
-                    self.currentStatus.aktualnie_gra = True
-                    self.currentStatus.resetujTS()
+                self.aktualnie_gra = True
         if player_item:
-            tyt = player_item['item']['label']
-            if tyt is None:
-                self.currentStatus.item.title = ''
-            else:
-                self.currentStatus.item.title = str(tyt)
+            self.tytul = THutils.xstr(player_item['item']['label'])
         else:
-            self.currentStatus.item.title = ''
+            self.tytul = ''
 
-    def resume(self):
-        self.odtwarzaj_z_linku(self.currentStatus.item.link)
+        if player_properties is not None:
+            proc = 0
+            try:
+                self.totaltime = int((player_properties['totaltime']['hours'] * 60 * 60) +
+                                     (player_properties['totaltime']['minutes'] * 60) +
+                                     player_properties['totaltime']['seconds'])
+                self.currenttime = int((player_properties['time']['hours'] * 60 * 60) +
+                                       (player_properties['time']['minutes'] * 60) +
+                                       player_properties['time']['seconds'])
+                proc = int(player_properties['percentage'])
+            except TypeError as serr:
+                self.logger.warning(OBSZAR_NAGL, 'kodi', 'Blad odczytu player_properties KODI: ' + str(serr))
+            if proc > 100:
+                proc = 100
+            self.percentage = proc
+        else:
+            self.totaltime = 0
+            self.currenttime = 0
+            self.percentage = 0
+        return
 
     def odtwarzaj_z_linku(self, link):
+        odtwarzacz.Odtwarzacz.odtwarzaj_z_linku(self, link)
         if link == '':
-            if self.logger:
-                self.logger.warning(OBSZAR_NAGL, 'kodi', 'Blad z funkcji odtwarzaj_z_linku: link pusty')
+            self.logger.warning(OBSZAR_NAGL, 'kodi', 'Blad z funkcji odtwarzaj_z_linku: link pusty')
             return
         par = {"item": {"file": link}}
-        wynik = self.__ask_kodi("Player.Open", par)
-        return wynik
+        self.__ask_kodi("Player.Open", par)
 
     def stop(self):
+        odtwarzacz.Odtwarzacz.stop(self)
         player = self.__get_aktywny_player_kodi()
         if player is None:
             return
@@ -80,6 +78,7 @@ class Kodi():
         self.__ask_kodi("Player.Stop", par)
 
     def idz_do(self, czas):
+        odtwarzacz.Odtwarzacz.idz_do(self, czas)
         player = self.__get_aktywny_player_kodi()
         if player is None:
             return
@@ -87,13 +86,14 @@ class Kodi():
                "value": int(czas)}
         self.__ask_kodi("Player.Seek", par)
 
-    '''def play_pause(self, start=False):
+    def play_pause(self, start=False):
+        odtwarzacz.Odtwarzacz.play_pause(self)
         player = self.__get_aktywny_player_kodi()
         if player is None:
             return
         par = {"playerid": player}
-        self.__ask_kodi("Player.PlayPause", par)'''
-
+        # TODO teraz stop, ale do przerobienia na pauze jak ogarne czemu Leia nieakceptuje pauzy
+        self.__ask_kodi("Player.PlayPause", par)
 
     def __ask_kodi(self, method, params):
         zapytanie = {"jsonrpc": "2.0",
@@ -102,17 +102,15 @@ class Kodi():
                      "id": method}
         odp = ''
         try:
-            odp = requests.post(ADRES_KODI + '?request=', data=json.dumps(zapytanie)).text
+            odp = requests.post(self.adres_kodi + '?request=', data=json.dumps(zapytanie)).text
         except Exception as serr:
-            if self.logger:
-                self.logger.warning(OBSZAR_NAGL, 'kodi', 'Blad wysylania post do KODI, zapyt:' + str(method) + str(params) + ')' + str(serr))
+            self.logger.warning(OBSZAR_NAGL, 'kodi', 'Blad wysylania post do KODI, zapyt:' + str(method) + str(params) + ')' + str(serr))
             return None
         try:
             nag = json.loads(str(odp))
             if nag['id'] != method:
-                if self.logger:
-                    self.logger.warning(OBSZAR_NAGL, 'kodi', 'Odpowiedz KODI na nie to pytanie (zapyt:' + str(method)
-                                        + str(params) + '). Odpowiedz: ' + str(nag['id']))
+                self.logger.warning(OBSZAR_NAGL, 'kodi', 'Odpowiedz KODI na nie to pytanie (zapyt:' + str(method)
+                                    + str(params) + '). Odpowiedz: ' + str(nag['id']))
                 return None
         except ValueError as serr:
             self.logger.warning(OBSZAR_NAGL, 'kodi', 'Bledna odp KODI konw JSON(zapyt:'+ str(method) + str(params) + ')' + str(serr))
@@ -121,23 +119,36 @@ class Kodi():
         try:
             wynik = nag['result']
         except KeyError as serr:
-            if self.logger:
-                self.logger.warning(OBSZAR_NAGL, 'kodi', 'Bledna odpowiedz KODI (zapyt:'+ str(method) + str(params) + ')' + str(serr))
-                self.logger.warning(OBSZAR_NAGL, 'kodi', 'Wynik bledu:' + str(nag))
+            self.logger.warning(OBSZAR_NAGL, 'kodi', 'Bledna odpowiedz KODI (zapyt:'+ str(method) + str(params) + ')' + str(serr))
+            self.logger.warning(OBSZAR_NAGL, 'kodi', 'Wynik bledu:' + str(nag))
         return wynik
 
     def __get_aktywny_player_kodi(self):
-        #TODO kodi bedzie gralo tylko audio, wiec player zawsze 1???
         par = {}
         akt_player = self.__ask_kodi("Player.GetActivePlayers", par)
         if akt_player is not None:
             if len(akt_player) > 0:
                 return akt_player[0]['playerid']
-        #self.logger.warning(OBSZAR_NAGL, 'kodi', 'Brak info o aktywnym playerze Kodi.')
+        # self.logger.warning('Brak info o aktywnym playerze Kodi.')
         return None
 
-    '''def __inicjalizuj_kodi(self):
-        # regularne inicjalizowanie glosnosci KODI
-        self.__ask_kodi("Application.SetVolume", {"volume": 100})
-        threading.Timer(CZAS_INICJALIZOWANIA_KODI, self.__inicjalizuj_kodi).start()'''
+    def __inicjalizuj_kodi(self):
+        par = {"volume": 100}
+        self.__ask_kodi("Application.SetVolume", par)
+        threading.Timer(CZAS_INICJALIZOWANIA_KODI, self.__inicjalizuj_kodi).start()
 
+"""    def __player_get_properties_kodi(self):
+        player = self.__get_aktywny_player_kodi()
+        if player is None:
+            return None
+        par = {"playerid": player,
+               "properties": ['speed', 'time', 'percentage', 'position', 'totaltime']}
+        return self.__ask_kodi("Player.GetProperties", par)
+
+    def __player_get_item_kodi(self):
+        player = self.__get_aktywny_player_kodi()
+        if player is None:
+            return None
+        par = {"playerid": player,
+               "properties": ['file', 'album']}
+        return self.__ask_kodi("Player.GetItem", par)"""
