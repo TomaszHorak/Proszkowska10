@@ -5,6 +5,7 @@ from Obszar import Obszar
 import constants
 from time import time
 from THutils import zapisz_temp_w_logu
+#TODO logowanie temperatur w SQLIte zamiast w pliku logu
 from THutils import odczytaj_parametr_konfiguracji
 from THutils import skonstruuj_odpowiedzV2OK
 
@@ -13,7 +14,7 @@ DEFAULT_TEMP_MIN = 17.0
 DEFAULT_TEMP_MAX = 25.0
 CZAS_OPOZNIENIA_PRZYJMOWANIA_01_STOPNIA = 30*60  # w sekundach
 HISTEREZA = 0.5
-CZAS_DO_ALARMU = 150*60 #liczba sekund bez zmiany stanu temp do podniesienia alarmu
+CZAS_DO_ALARMU = 160*60 #liczba sekund bez zmiany stanu temp do podniesienia alarmu
 
 OGRZ_ZOSIA = 'ogrz_zosia'
 OGRZ_ZOSIA_PIN = 17
