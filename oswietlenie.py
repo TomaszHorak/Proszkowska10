@@ -5,6 +5,8 @@ import constants
 import wejsciawyjscia
 from Obszar import Obszar
 
+#TODO dodac punkt swietlny przy holu na dole, ledy
+
 WEJSCIE_WLACZNIK_SMIETNIK_WIATROLAP = 'wl_smietnik_WIATROLAP'
 WEJSCIE_WLACZNIK_SMIETNIK_GARAZ4 = 'wl_smietnik_GARAZ4'
 PIN_WL_SMIETNIK_WIATROLAP = 11
