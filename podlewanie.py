@@ -70,7 +70,8 @@ class Podlewanie(Obszar):
         self.plywak_studnia = 0
         self.plywak_szambo = 0
 
-        a = THutils.odczytaj_parametr_konfiguracji(self.obszar, 'podlewanie_aktywne', self.logger)
+        #TODO nowe funkcja w utils sprawdzanie parametru typu boolen a nie za kazdym razem ten if a in ['True
+        a = THutils.odczytaj_parametr_konfiguracji(self.obszar, constants.PODLEWANIE_AKTYWNE, self.logger)
         if a in ['True', 'true', 'TRUE']:
             self.podlewanie_aktywne = True
         else:
@@ -93,6 +94,7 @@ class Podlewanie(Obszar):
             if params[constants.KOMENDA] == 'WP':
                 if constants.POLE_STAN in params:
                     self.aktywuj_podlewania(params[constants.POLE_STAN])
+                    self.resetuj_ts()
         return Obszar.odpowiedz(self)
 
     def aktywuj_podlewania(self, stan):
@@ -100,20 +102,19 @@ class Podlewanie(Obszar):
             self.petla.dzialaj_na_wszystkich_pozycjach(self.obszar, stan)  # wylaczenie wszystkich sekcji
         self.logger.info(self.obszar, self.obszar, 'Uaktywniono podlewanie: ' + str(stan))
         self.podlewanie_aktywne = stan
-        THutils.zapisz_parametr_konfiguracji(self.obszar, 'podlewanie', 'podlewanie_aktywne: ' + str(stan),
-                                             logger=self.logger)
+        THutils.zapisz_parametr_konfiguracji(self.obszar, constants.PODLEWANIE_AKTYWNE, stan, self.logger)
         self.resetuj_ts()
         self.aktualizuj_biezacy_stan()
 
     def dzialanie_petli(self, nazwa, stan, pozycjapetli):
         self.aktualizuj_plywaki()
         self.resetuj_ts()
-        if self.podlewanie_aktywne:
+        if self.podlewanie_aktywne == True:
             if self.wewy.wyjscia.ustaw_przekaznik_nazwa(nazwa, stan):
                 self.logger.info(self.obszar, nazwa, 'Stan: ' + str(stan))
                 self.odpal_firebase()
         else:
-            self.logger.warning(self.obszar, 'stat', 'Proba dzialania na sekcji przy deaktywowanym podlewaniu.')
+            self.logger.warning(self.obszar, 'stat', 'Proba dzialania na sekcji przy deaktywowanym podlewaniu. Podlewanie_aktywne ' + str(self.podlewanie_aktywne))
 
     def aktualizuj_plywaki(self):
         # wywolywane za kazdym przebiegiem petli, bez wzgledu na to czy byla zmiana stanu czy nie
